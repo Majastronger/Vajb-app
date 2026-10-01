@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, FunctionsHttpError } from '@supabase/supabase-js';
 
-const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+// Public values (safe to ship in the app). Env vars override them for a different project.
+const url = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://fiqfwzapmxterynrfznc.supabase.co';
+const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_TwIySiCuMu4m9gVcmrjDGQ__LVq_m75';
 
 export const configured = Boolean(url && anonKey);
 
