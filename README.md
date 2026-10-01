@@ -27,7 +27,7 @@ Za objavu treba "upload key". Dodaje se kao tri GitHub tajne (`UPLOAD_KEYSTORE_B
 Prije svakog novog uploada povećaj `versionCode` u `app/app.json`.
 
 ## Troškovi AI-ja
-Tekst piše Claude (`claude-opus-5-5`, nizak "effort"), slike Google Imagen (`imagen-4.0-generate-001`, ključ `GOOGLE_API_KEY` u Supabase Secrets, model se mijenja s `IMAGE_MODEL`). Model se mijenja bez novog builda aplikacije: u Supabase Secrets postavi `CLAUDE_MODEL`, npr. `claude-haiku-4-5` za jeftiniju varijantu.
+Tekst piše Claude (`claude-opus-5-5`, nizak "effort"), slike Google Gemini (`gemini-2.5-flash-image`, ključ `GOOGLE_API_KEY` u Supabase Secrets, model se mijenja s `IMAGE_MODEL`). Model se mijenja bez novog builda aplikacije: u Supabase Secrets postavi `CLAUDE_MODEL`, npr. `claude-haiku-4-5` za jeftiniju varijantu.
 
 ## Još nije napravljeno
 - Reklame (AdMob)

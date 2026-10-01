@@ -1,5 +1,5 @@
 import Anthropic from 'npm:@anthropic-ai/sdk@0.129.0';
-import { GoogleGenAI, PersonGeneration } from 'npm:@google/genai@2.25.0';
+import { GoogleGenAI, Modality } from 'npm:@google/genai@2.25.0';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 import {
@@ -29,7 +29,7 @@ const DAILY_FREE_CAP: Record<Kind, number> = {
 const MODEL = Deno.env.get('CLAUDE_MODEL') ?? 'claude-haiku-4-5';
 // Haiku 4.5 takes neither effort nor server-side fallbacks.
 const IS_HAIKU = MODEL.startsWith('claude-haiku');
-const IMAGE_MODEL = Deno.env.get('IMAGE_MODEL') ?? 'imagen-4.0-generate-001';
+const IMAGE_MODEL = Deno.env.get('IMAGE_MODEL') ?? 'gemini-2.5-flash-image';
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
 type ImageType = (typeof IMAGE_TYPES)[number];
 const MAX_IMAGE_BASE64 = 5_000_000;
@@ -141,24 +141,22 @@ Deno.serve(async (req) => {
 
       const googleKey = Deno.env.get('GOOGLE_API_KEY');
       if (!googleKey) throw new Error('GOOGLE_API_KEY is not set');
-      const result = await new GoogleGenAI({ apiKey: googleKey }).models.generateImages({
+      const result = await new GoogleGenAI({ apiKey: googleKey }).models.generateContent({
         model: IMAGE_MODEL,
-        prompt: plan.prompt,
+        contents: plan.prompt,
         config: {
-          numberOfImages: 1,
-          aspectRatio: ASPECT[parsed.options.format] ?? '1:1',
-          personGeneration: PersonGeneration.ALLOW_ADULT,
-          includeRaiReason: true,
+          responseModalities: [Modality.IMAGE],
+          imageConfig: { aspectRatio: ASPECT[parsed.options.format] ?? '1:1' },
         },
       });
-      const image = result.generatedImages?.[0];
-      if (!image?.image?.imageBytes) {
-        console.error('image filtered', image?.raiFilteredReason);
+      const image = result.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData;
+      if (!image?.data) {
+        console.error('no image returned', result.candidates?.[0]?.finishReason, result.promptFeedback?.blockReason);
         throw new Refused();
       }
       return reply(200, {
-        image: image.image.imageBytes,
-        mimeType: image.image.mimeType ?? 'image/png',
+        image: image.data,
+        mimeType: image.mimeType ?? 'image/png',
         remaining,
       });
     }
