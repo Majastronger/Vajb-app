@@ -1,10 +1,35 @@
 import Anthropic from 'npm:@anthropic-ai/sdk@0.129.0';
+import { GoogleGenAI, PersonGeneration } from 'npm:@google/genai@2.25.0';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-import { buildPrompt, OUTPUT_SCHEMA, parseRequest, SYSTEM } from './prompts.ts';
+import {
+  ASPECT,
+  buildImagePrompt,
+  buildPrompt,
+  IMAGE_PROMPT_SCHEMA,
+  OUTPUT_SCHEMA,
+  parseRequest,
+  SYSTEM,
+  type TextMode,
+} from './prompts.ts';
 
-const FREE_PER_DAY = 5;
-const MODEL = Deno.env.get('CLAUDE_MODEL') ?? 'claude-opus-5-5';
+// Daily limits per kind. null = unlimited.
+const LIMITS = {
+  text: { free: 5, premium: null },
+  image: { free: 1, premium: 20 },
+} as const;
+type Kind = keyof typeof LIMITS;
+
+// Budget caps for free users, across everyone, per day. Premium users are not counted against them.
+const DAILY_FREE_CAP: Record<Kind, number> = {
+  text: Number(Deno.env.get('DAILY_TEXT_CAP') ?? 150),
+  image: Number(Deno.env.get('DAILY_IMAGE_CAP') ?? 8),
+};
+
+const MODEL = Deno.env.get('CLAUDE_MODEL') ?? 'claude-haiku-4-5';
+// Haiku 4.5 takes neither effort nor server-side fallbacks.
+const IS_HAIKU = MODEL.startsWith('claude-haiku');
+const IMAGE_MODEL = Deno.env.get('IMAGE_MODEL') ?? 'imagen-4.0-generate-001';
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
 type ImageType = (typeof IMAGE_TYPES)[number];
 const MAX_IMAGE_BASE64 = 5_000_000;
@@ -23,6 +48,31 @@ function reply(status: number, body: unknown) {
 const fail = (status: number, code: string, message: string, extra: object = {}) =>
   reply(status, { code, message, ...extra });
 
+class Refused extends Error {}
+
+async function askClaude(
+  system: string,
+  content: Anthropic.Beta.BetaContentBlockParam[],
+  schema: Record<string, unknown>,
+): Promise<unknown> {
+  const response = await anthropic.beta.messages.create({
+    model: MODEL,
+    max_tokens: 4000,
+    system,
+    ...(IS_HAIKU
+      ? { output_config: { format: { type: 'json_schema', schema } } }
+      : {
+          betas: ['server-side-fallback-2026-07-01'],
+          fallbacks: 'default' as const,
+          output_config: { effort: 'low' as const, format: { type: 'json_schema' as const, schema } },
+        }),
+    messages: [{ role: 'user', content }],
+  });
+  if (response.stop_reason === 'refusal') throw new Refused();
+  const text = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');
+  return JSON.parse(text);
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return fail(405, 'method', 'Samo POST.');
@@ -37,66 +87,96 @@ Deno.serve(async (req) => {
   const parsed = parseRequest(body);
   if (typeof parsed === 'string') return fail(400, 'bad_request', parsed);
 
-  let image: { data: string; media_type: ImageType } | null = null;
+  let photo: { data: string; media_type: ImageType } | null = null;
   if (parsed.hasImage) {
     const img = (body as { image?: { base64?: unknown; mediaType?: unknown } }).image;
     const type = IMAGE_TYPES.find((t) => t === img?.mediaType);
     if (typeof img?.base64 !== 'string' || !type) return fail(400, 'bad_image', 'Ova vrsta slike nije podržana.');
     if (img.base64.length > MAX_IMAGE_BASE64) return fail(400, 'bad_image', 'Slika je prevelika.');
-    image = { data: img.base64, media_type: type };
+    photo = { data: img.base64, media_type: type };
   }
 
-  // Premium users are unlimited; everyone else gets FREE_PER_DAY a day.
+  // Daily credits, separate for text and images.
+  const kind: Kind = parsed.mode === 'image' ? 'image' : 'text';
   const { data: profile } = await admin
     .from('profiles')
     .select('is_premium, premium_until')
     .eq('user_id', userId)
     .maybeSingle();
   const premium = !!profile?.is_premium && (!profile.premium_until || new Date(profile.premium_until) > new Date());
+  const limit = premium ? LIMITS[kind].premium : LIMITS[kind].free;
+
+  if (!premium) {
+    const { data: usedToday, error } = await admin.rpc('usage_today', { p_kind: kind });
+    if (error) return fail(500, 'server', 'Nešto je pošlo po zlu. Probaj opet.');
+    if (usedToday >= DAILY_FREE_CAP[kind]) {
+      const what = kind === 'image' ? 'Današnje besplatne slike' : 'Današnja besplatna generiranja';
+      return fail(429, 'sold_out', `${what} su razgrabljene za sve korisnike. Vrati se sutra 💛`, { kind });
+    }
+  }
 
   let remaining: number | null = null;
-  if (!premium) {
-    const { data: left, error } = await admin.rpc('take_credit', { p_user: userId, p_limit: FREE_PER_DAY });
+  if (limit !== null) {
+    const { data: left, error } = await admin.rpc('take_credit', { p_user: userId, p_limit: limit, p_kind: kind });
     if (error) return fail(500, 'server', 'Nešto je pošlo po zlu. Probaj opet.');
     if (left < 0) {
-      return fail(429, 'limit', `Potrošio/la si ${FREE_PER_DAY} besplatnih generiranja za danas.`, { remaining: 0 });
+      const what = kind === 'image' ? (limit === 1 ? 'besplatnu sliku' : 'slike') : 'besplatna generiranja';
+      return fail(429, 'limit', `Za danas si potrošio/la ${what}. Vrati se sutra ili probaj Premium.`, { remaining: 0, kind });
     }
     remaining = left;
   }
 
   const refund = async () => {
-    if (!premium) await admin.rpc('refund_credit', { p_user: userId });
+    if (limit !== null) await admin.rpc('refund_credit', { p_user: userId, p_kind: kind });
   };
 
   try {
-    const response = await anthropic.beta.messages.create({
-      model: MODEL,
-      max_tokens: 4000,
-      system: SYSTEM,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-      output_config: { effort: 'low', format: { type: 'json_schema', schema: OUTPUT_SCHEMA } },
-      messages: [
-        {
-          role: 'user',
-          content: [
-            ...(image ? [{ type: 'image' as const, source: { type: 'base64' as const, ...image } }] : []),
-            { type: 'text' as const, text: buildPrompt(parsed) },
-          ],
-        },
-      ],
-    });
+    if (parsed.mode === 'image') {
+      const plan = (await askClaude(
+        'You write safe prompts for an image generation model.',
+        [{ type: 'text', text: buildImagePrompt(parsed) }],
+        IMAGE_PROMPT_SCHEMA,
+      )) as { allowed: boolean; prompt: string };
+      if (!plan.allowed || !plan.prompt) throw new Refused();
 
-    if (response.stop_reason === 'refusal') {
-      await refund();
-      return fail(422, 'refused', 'AI ne može odgovoriti na ovaj tekst. Probaj ga preformulirati.');
+      const googleKey = Deno.env.get('GOOGLE_API_KEY');
+      if (!googleKey) throw new Error('GOOGLE_API_KEY is not set');
+      const result = await new GoogleGenAI({ apiKey: googleKey }).models.generateImages({
+        model: IMAGE_MODEL,
+        prompt: plan.prompt,
+        config: {
+          numberOfImages: 1,
+          aspectRatio: ASPECT[parsed.options.format] ?? '1:1',
+          personGeneration: PersonGeneration.ALLOW_ADULT,
+          includeRaiReason: true,
+        },
+      });
+      const image = result.generatedImages?.[0];
+      if (!image?.image?.imageBytes) {
+        console.error('image filtered', image?.raiFilteredReason);
+        throw new Refused();
+      }
+      return reply(200, {
+        image: image.image.imageBytes,
+        mimeType: image.image.mimeType ?? 'image/png',
+        remaining,
+      });
     }
 
-    const text = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');
-    const out = JSON.parse(text) as { items: { tag: string; text: string }[]; hashtags: string };
+    const out = (await askClaude(
+      SYSTEM,
+      [
+        ...(photo ? [{ type: 'image' as const, source: { type: 'base64' as const, ...photo } }] : []),
+        { type: 'text' as const, text: buildPrompt(parsed as typeof parsed & { mode: TextMode }) },
+      ],
+      OUTPUT_SCHEMA,
+    )) as { items: { tag: string; text: string }[]; hashtags: string };
     return reply(200, { items: out.items.slice(0, 3), hashtags: out.hashtags ?? '', remaining });
   } catch (e) {
     await refund();
+    if (e instanceof Refused) {
+      return fail(422, 'refused', 'Ovo ne mogu napraviti. Probaj drugačiji opis, bez stvarnih osoba i neprimjerenog sadržaja.');
+    }
     if (e instanceof Anthropic.RateLimitError) {
       return fail(503, 'busy', 'Puno je ljudi trenutno. Probaj za minutu.');
     }

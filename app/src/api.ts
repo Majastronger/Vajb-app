@@ -13,7 +13,7 @@ const supabase = configured
     })
   : null;
 
-export type Mode = 'caption' | 'reply' | 'bio';
+export type Mode = 'caption' | 'reply' | 'bio' | 'reel' | 'wish' | 'rate';
 
 export type GenerateRequest = {
   mode: Mode;
@@ -30,6 +30,12 @@ export type GenerateResult = {
   remaining: number | null; // null = premium (unlimited)
 };
 
+export type ImageResult = {
+  image: string; // base64
+  mimeType: string;
+  remaining: number | null;
+};
+
 export class ApiError extends Error {
   constructor(public code: string, message: string, public remaining?: number) {
     super(message);
@@ -41,12 +47,15 @@ async function ensureSession() {
   const { data } = await supabase.auth.getSession();
   if (data.session) return;
   const { error } = await supabase.auth.signInAnonymously();
-  if (error) throw new ApiError('auth', 'Ne mogu se spojiti. Provjeri internet pa probaj opet.');
+  if (error) {
+    const offline = error.message?.toLowerCase().includes('network');
+    throw new ApiError('auth', offline ? 'Nema interneta. Provjeri vezu pa probaj opet.' : 'Prijava na server nije uspjela. Probaj za par minuta.');
+  }
 }
 
-export async function generate(req: GenerateRequest): Promise<GenerateResult> {
+async function call<T>(body: object): Promise<T> {
   await ensureSession();
-  const { data, error } = await supabase!.functions.invoke('generate', { body: req });
+  const { data, error } = await supabase!.functions.invoke('generate', { body });
   if (error) {
     if (error instanceof FunctionsHttpError) {
       const body = await error.context.json().catch(() => null);
@@ -54,5 +63,13 @@ export async function generate(req: GenerateRequest): Promise<GenerateResult> {
     }
     throw new ApiError('network', 'Nema veze sa serverom. Provjeri internet pa probaj opet.');
   }
-  return data as GenerateResult;
+  return data as T;
+}
+
+export function generate(req: GenerateRequest): Promise<GenerateResult> {
+  return call<GenerateResult>(req);
+}
+
+export function generateImage(input: string, options: Record<string, string>): Promise<ImageResult> {
+  return call<ImageResult>({ mode: 'image', input, options });
 }
