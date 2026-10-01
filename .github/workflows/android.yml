@@ -16,23 +16,28 @@ jobs:
       HAS_UPLOAD_KEY: ${{ secrets.UPLOAD_KEYSTORE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: app/package-lock.json
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
+
       - run: npm ci
       - run: npx expo prebuild --platform android --no-install
         env:
           CI: 1
+
       - name: Build test APK
         working-directory: app/android
         run: ./gradlew assembleRelease --no-daemon
       - run: cp android/app/build/outputs/apk/release/app-release.apk vajb-test.apk
+
       - name: Build and sign Play bundle
         if: env.HAS_UPLOAD_KEY == 'true'
         env:
@@ -41,17 +46,22 @@ jobs:
           KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
         run: |
           (cd android && ./gradlew bundleRelease --no-daemon)
-          echo "$KEYSTORE_B64" | base64 -d > upload.jks
+          CLEAN=$(printf '%s' "$KEYSTORE_B64" | tr -d '[:space:]')
+          echo "Upload key length: ${#CLEAN} characters (expected 2876)"
+          printf '%s' "$CLEAN" | base64 -d > upload.jks
+          PASS=$(printf '%s' "$KEYSTORE_PASSWORD" | tr -d '[:space:]')
+          ALIAS=$(printf '%s' "$KEY_ALIAS" | tr -d '[:space:]')
           cp android/app/build/outputs/bundle/release/app-release.aab vajb-play.aab
           zip -q -d vajb-play.aab 'META-INF/*' || true
           jarsigner -sigalg SHA256withRSA -digestalg SHA-256 -keystore upload.jks \
-            -storepass "$KEYSTORE_PASSWORD" vajb-play.aab "$KEY_ALIAS"
+            -storepass "$PASS" vajb-play.aab "$ALIAS"
           rm upload.jks
+
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: vajb-android
           path: |
             app/vajb-test.apk
             app/vajb-play.aab
           if-no-files-found: warn
-        
