@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Vajb AI",
+    "slug": "vajb-ai",
+    "version": "1.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.vajbai.app"
+    },
+    "android": {
+      "package": "com.vajbai.app",
+      "versionCode": 2,
+      "adaptiveIcon": {
+        "backgroundColor": "#E3246E",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Vajb koristi fotku samo da bi napisao opis za tvoju objavu.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      "expo-sharing"
+    ],
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
