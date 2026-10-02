@@ -1,8 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   BackHandler,
@@ -20,6 +21,7 @@ import {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { ApiError, generate, generateImage, type GenerateResult, type Mode } from './src/api';
+import { CAPTION_LANG_VALUE, detectLang, LANGS, optionLabel, STRINGS, type Lang, type ToolId } from './src/i18n';
 import { loadSaved, removeSaved, saveImage, saveText, writeImageFile, type SavedItem } from './src/saved';
 
 const light = {
@@ -34,118 +36,114 @@ type Colors = typeof light;
 
 const FREE_TEXT_PER_DAY = 5;
 const FREE_IMAGES_PER_DAY = 1;
+const LANG_KEY = 'vajb-lang';
 
+// Option values are the Croatian strings the server expects; labels come from i18n.
 type Field = { key: string; label: string; options: string[] };
-type TextTool = {
-  id: Mode;
-  icon: string;
-  name: string;
-  blurb: string;
-  title: string;
-  subtitle: string;
-  inputLabel: string;
-  placeholder: string;
-  fields: Field[];
-  button: string;
-  photo?: 'optional' | 'required';
-};
-type ToolId = Mode | 'image';
+type TextTool = { id: Mode; icon: string; fields: Field[]; photo?: 'optional' | 'required' };
+
+const CAPTION_LANGS = ['Hrvatski', 'Bosanski', 'Srpski', 'Deutsch', 'English'];
 
 const TEXT_TOOLS: TextTool[] = [
   {
-    id: 'caption', icon: '📸', name: 'Opis objave', blurb: 'Opis i hashtagovi',
-    title: 'Opis za tvoju objavu',
-    subtitle: 'Opiši fotku ili video, AI složi opis i hashtagove.',
-    inputLabel: 'Što je na objavi?',
-    placeholder: 'npr. Ja i ekipa na plaži u Makarskoj, zalazak sunca',
+    id: 'caption', icon: '📸', photo: 'optional',
     fields: [
-      { key: 'platform', label: 'Mreža', options: ['Instagram', 'TikTok', 'Facebook'] },
-      { key: 'tone', label: 'Stil', options: ['Opušteno', 'Duhovito', 'Romantično', 'Motivacijski', 'Misteriozno'] },
-      { key: 'language', label: 'Jezik', options: ['Hrvatski', 'English'] },
+      { key: 'platform', label: 'platform', options: ['Instagram', 'TikTok', 'Facebook'] },
+      { key: 'tone', label: 'tone', options: ['Opušteno', 'Duhovito', 'Romantično', 'Motivacijski', 'Misteriozno'] },
+      { key: 'language', label: 'language', options: CAPTION_LANGS },
     ],
-    button: 'Napravi opis ✨',
-    photo: 'optional',
   },
   {
-    id: 'reply', icon: '💬', name: 'Što da odgovorim?', blurb: 'Odgovori na poruke',
-    title: 'Što da odgovorim?',
-    subtitle: 'Zalijepi poruku koju si dobio/la i odaberi kako želiš zvučati.',
-    inputLabel: 'Poruka koju si dobio/la',
-    placeholder: 'npr. Hej, jesi za piće ovaj vikend? 🍹',
+    id: 'reply', icon: '💬',
     fields: [
-      { key: 'sender', label: 'Tko ti piše', options: ['Simpatija', 'Prijatelj', 'Ekipa u grupi', 'Posao'] },
-      { key: 'tone', label: 'Kako želiš zvučati', options: ['Duhovito', 'Opušteno', 'Flert', 'Samouvjereno', 'Pristojno odbij'] },
+      { key: 'sender', label: 'sender', options: ['Simpatija', 'Prijatelj', 'Ekipa u grupi', 'Posao'] },
+      { key: 'tone', label: 'how', options: ['Duhovito', 'Opušteno', 'Flert', 'Samouvjereno', 'Pristojno odbij'] },
     ],
-    button: 'Predloži odgovore 💬',
   },
   {
-    id: 'reel', icon: '🎬', name: 'Ideja za video', blurb: 'TikTok i Reels scenarij',
-    title: 'Ideja za TikTok ili Reels',
-    subtitle: 'Reci o čemu želiš snimiti, dobiješ scenarij kadar po kadar.',
-    inputLabel: 'O čemu je video?',
-    placeholder: 'npr. moja jutarnja rutina prije faksa',
+    id: 'reel', icon: '🎬',
     fields: [
-      { key: 'platform', label: 'Za', options: ['TikTok', 'Instagram Reels', 'YouTube Shorts'] },
-      { key: 'length', label: 'Duljina', options: ['15 s', '30 s', '60 s'] },
-      { key: 'style', label: 'Stil', options: ['Duhovito', 'Edukativno', 'Vlog', 'Trend', 'Prije/poslije'] },
+      { key: 'platform', label: 'for', options: ['TikTok', 'Instagram Reels', 'YouTube Shorts'] },
+      { key: 'length', label: 'length', options: ['15 s', '30 s', '60 s'] },
+      { key: 'style', label: 'style', options: ['Duhovito', 'Edukativno', 'Vlog', 'Trend', 'Prije/poslije'] },
     ],
-    button: 'Smisli video 🎬',
   },
   {
-    id: 'wish', icon: '💌', name: 'Čestitka', blurb: 'Rođendan, ljubav, prijatelji',
-    title: 'Čestitka ili posveta',
-    subtitle: 'Odaberi priliku i dodaj par detalja, dobiješ osobnu poruku.',
-    inputLabel: 'Za koga je i neki detalj (nije obavezno)',
-    placeholder: 'npr. Ivana, najbolja prijateljica, volimo karaoke i kavu',
+    id: 'wish', icon: '💌',
     fields: [
-      { key: 'occasion', label: 'Prilika', options: ['Rođendan', 'Godišnjica veze', 'Simpatiji', 'Prijatelju', 'Mami ili tati', 'Vjenčanje', 'Novi posao'] },
-      { key: 'tone', label: 'Stil', options: ['Emotivno', 'Duhovito', 'Kratko i slatko', 'Pjesmica'] },
+      { key: 'occasion', label: 'occasion', options: ['Rođendan', 'Godišnjica veze', 'Simpatiji', 'Prijatelju', 'Mami ili tati', 'Vjenčanje', 'Novi posao'] },
+      { key: 'tone', label: 'tone', options: ['Emotivno', 'Duhovito', 'Kratko i slatko', 'Pjesmica'] },
     ],
-    button: 'Napiši poruku 💌',
   },
   {
-    id: 'rate', icon: '⭐', name: 'Ocijeni fotku', blurb: 'Savjeti prije objave',
-    title: 'Ocijeni moju fotku',
-    subtitle: 'AI pogleda fotku i kaže kako je poboljšati prije objave.',
-    inputLabel: 'Nešto dodatno (nije obavezno)',
-    placeholder: 'npr. ne znam koji filter staviti',
-    fields: [{ key: 'purpose', label: 'Fotka je za', options: ['Instagram objava', 'Profilna slika', 'Dating profil', 'TikTok naslovna'] }],
-    button: 'Ocijeni ⭐',
-    photo: 'required',
+    id: 'rate', icon: '⭐', photo: 'required',
+    fields: [{ key: 'purpose', label: 'purpose', options: ['Instagram objava', 'Profilna slika', 'Dating profil', 'TikTok naslovna'] }],
   },
   {
-    id: 'bio', icon: '👤', name: 'Bio za profil', blurb: 'Instagram, TikTok, dating',
-    title: 'Bio za profil',
-    subtitle: 'Napiši par riječi o sebi, dobiješ bio za Instagram ili TikTok.',
-    inputLabel: 'O tebi',
-    placeholder: 'npr. studentica, Zagreb, volim kavu, techno i putovanja',
+    id: 'bio', icon: '👤',
     fields: [
-      { key: 'platform', label: 'Za', options: ['Instagram', 'TikTok', 'Tinder/Bumble', 'LinkedIn'] },
-      { key: 'tone', label: 'Stil', options: ['Cool', 'Duhovito', 'Minimal', 'Ozbiljno'] },
+      { key: 'platform', label: 'for', options: ['Instagram', 'TikTok', 'Tinder/Bumble', 'LinkedIn'] },
+      { key: 'tone', label: 'tone', options: ['Cool', 'Duhovito', 'Minimal', 'Ozbiljno'] },
     ],
-    button: 'Napravi bio 🪄',
   },
 ];
 
 const IMAGE_FIELDS: Field[] = [
-  { key: 'style', label: 'Stil', options: ['Fotografija', 'Anime', 'Crtić', '3D', 'Akvarel', 'Neon'] },
-  { key: 'format', label: 'Format', options: ['Kvadrat', 'Uspravno', 'Vodoravno'] },
+  { key: 'style', label: 'style', options: ['Fotografija', 'Anime', 'Crtić', '3D', 'Akvarel', 'Neon'] },
+  { key: 'format', label: 'format', options: ['Kvadrat', 'Uspravno', 'Vodoravno'] },
 ];
 
-const toolName = (id: string) => (id === 'image' ? 'Slika' : TEXT_TOOLS.find((t) => t.id === id)?.name ?? id);
-const defaults = (fields: Field[]) => Object.fromEntries(fields.map((f) => [f.key, f.options[0]]));
-const asError = (e: unknown) => (e instanceof ApiError ? e : new ApiError('unknown', 'Nešto je pošlo po zlu. Probaj opet.'));
+const LangContext = createContext<Lang>('hr');
+const useLang = () => useContext(LangContext);
+const useT = () => STRINGS[useLang()];
+
+function defaults(fields: Field[], lang: Lang) {
+  const out = Object.fromEntries(fields.map((f) => [f.key, f.options[0]]));
+  if ('language' in out) out.language = CAPTION_LANG_VALUE[lang];
+  return out;
+}
+
+// Server messages are already localized; local failures get a message in the app language.
+function errorText(e: unknown, t: (typeof STRINGS)[Lang]) {
+  if (!(e instanceof ApiError)) return t.genericError;
+  if (e.message) return e.message;
+  if (e.code === 'offline') return t.noNetwork;
+  if (e.code === 'sign_in') return t.signInFailed;
+  if (e.code === 'not_configured') return t.notConfigured;
+  return t.genericError;
+}
 
 type Tab = 'home' | 'saved' | 'pro';
 
 export default function App() {
   const c = useColorScheme() === 'dark' ? dark : light;
+  const [lang, setLang] = useState<Lang>(detectLang);
+  const [langOpen, setLangOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('home');
   const [tool, setTool] = useState<ToolId | null>(null);
   const [textLeft, setTextLeft] = useState<number | null>(FREE_TEXT_PER_DAY);
+  const t = STRINGS[lang];
+
+  useEffect(() => {
+    AsyncStorage.getItem(LANG_KEY)
+      .then((v) => {
+        if (v && LANGS.some((l) => l.id === v)) setLang(v as Lang);
+      })
+      .catch(() => {});
+  }, []);
+
+  const chooseLang = (l: Lang) => {
+    setLang(l);
+    setLangOpen(false);
+    AsyncStorage.setItem(LANG_KEY, l).catch(() => {});
+  };
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (langOpen) {
+        setLangOpen(false);
+        return true;
+      }
       if (tool) {
         setTool(null);
         return true;
@@ -157,7 +155,7 @@ export default function App() {
       return false;
     });
     return () => sub.remove();
-  }, [tool, tab]);
+  }, [tool, tab, langOpen]);
 
   const goPremium = () => {
     setTool(null);
@@ -168,8 +166,8 @@ export default function App() {
   if (tab === 'home' && tool === 'image') {
     screen = <ImageTool c={c} onBack={() => setTool(null)} onLimit={goPremium} />;
   } else if (tab === 'home' && tool) {
-    const t = TEXT_TOOLS.find((x) => x.id === tool)!;
-    screen = <Generator key={t.id} tool={t} c={c} onBack={() => setTool(null)} onRemaining={setTextLeft} onLimit={goPremium} />;
+    const tt = TEXT_TOOLS.find((x) => x.id === tool)!;
+    screen = <Generator key={`${tt.id}-${lang}`} tool={tt} c={c} onBack={() => setTool(null)} onRemaining={setTextLeft} onLimit={goPremium} />;
   } else if (tab === 'home') {
     screen = <Home c={c} onOpen={setTool} />;
   } else if (tab === 'saved') {
@@ -178,74 +176,108 @@ export default function App() {
     screen = <Premium c={c} />;
   }
 
+  const current = LANGS.find((l) => l.id === lang)!;
+
   return (
-    <SafeAreaProvider>
-      <SafeAreaView style={[s.root, { backgroundColor: c.bg }]} edges={['top', 'bottom']}>
-        <StatusBar style="auto" />
-        <View style={s.header}>
-          <Text style={[s.logo, { color: c.fg }]}>
-            vajb<Text style={{ color: c.accent }}>.</Text>ai
-          </Text>
-          <View style={[s.credits, textLeft === null ? { backgroundColor: c.sun } : { backgroundColor: c.card, borderColor: c.line, borderWidth: 1 }]}>
-            <Text style={[s.creditsText, { color: textLeft === null ? c.sunFg : c.fg }]}>
-              {textLeft === null ? 'PREMIUM' : `${textLeft}/${FREE_TEXT_PER_DAY} danas`}
+    <LangContext.Provider value={lang}>
+      <SafeAreaProvider>
+        <SafeAreaView style={[s.root, { backgroundColor: c.bg }]} edges={['top', 'bottom']}>
+          <StatusBar style="auto" />
+          <View style={s.header}>
+            <Text style={[s.logo, { color: c.fg }]}>
+              vajb<Text style={{ color: c.accent }}>.</Text>ai
             </Text>
+            <View style={s.headerRight}>
+              <Pressable
+                onPress={() => setLangOpen(!langOpen)}
+                style={[s.langBtn, { borderColor: c.line, backgroundColor: c.card }]}
+                accessibilityRole="button"
+                accessibilityLabel={t.language}
+              >
+                <Text style={{ fontSize: 16 }}>{current.flag}</Text>
+                <Text style={{ color: c.fg, fontWeight: '700', fontSize: 13 }}>{lang.toUpperCase()}</Text>
+              </Pressable>
+              <View style={[s.credits, textLeft === null ? { backgroundColor: c.sun } : { backgroundColor: c.card, borderColor: c.line, borderWidth: 1 }]}>
+                <Text style={[s.creditsText, { color: textLeft === null ? c.sunFg : c.fg }]}>
+                  {textLeft === null ? 'PREMIUM' : `${textLeft}/${FREE_TEXT_PER_DAY} ${t.today}`}
+                </Text>
+              </View>
+            </View>
           </View>
-        </View>
 
-        <View style={{ flex: 1 }}>{screen}</View>
+          {langOpen && (
+            <View style={[s.langMenu, { borderColor: c.line, backgroundColor: c.card }]}>
+              {LANGS.map((l) => (
+                <Pressable
+                  key={l.id}
+                  onPress={() => chooseLang(l.id)}
+                  style={[s.langItem, l.id === lang && { backgroundColor: c.bg }]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: l.id === lang }}
+                >
+                  <Text style={{ fontSize: 18 }}>{l.flag}</Text>
+                  <Text style={{ color: c.fg, fontWeight: l.id === lang ? '800' : '500', fontSize: 15 }}>{l.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
 
-        <View style={[s.nav, { borderTopColor: c.line }]}>
-          {([
-            ['home', '✨', 'Alati'],
-            ['saved', '🔖', 'Spremljeno'],
-            ['pro', '👑', 'Premium'],
-          ] as const).map(([key, icon, label]) => (
-            <Pressable
-              key={key}
-              style={s.navBtn}
-              onPress={() => {
-                setTab(key);
-                setTool(null);
-              }}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: tab === key }}
-            >
-              <Text style={s.navIcon}>{icon}</Text>
-              <Text style={[s.navLabel, { color: tab === key ? c.accent : c.muted }]}>{label}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </SafeAreaView>
-    </SafeAreaProvider>
+          <View style={{ flex: 1 }}>{screen}</View>
+
+          <View style={[s.nav, { borderTopColor: c.line }]}>
+            {([
+              ['home', '✨', t.navTools],
+              ['saved', '🔖', t.navSaved],
+              ['pro', '👑', t.navPremium],
+            ] as const).map(([key, icon, label]) => (
+              <Pressable
+                key={key}
+                style={s.navBtn}
+                onPress={() => {
+                  setTab(key);
+                  setTool(null);
+                  setLangOpen(false);
+                }}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: tab === key }}
+              >
+                <Text style={s.navIcon}>{icon}</Text>
+                <Text style={[s.navLabel, { color: tab === key ? c.accent : c.muted }]}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </SafeAreaView>
+      </SafeAreaProvider>
+    </LangContext.Provider>
   );
 }
 
 function Home({ c, onOpen }: { c: Colors; onOpen: (id: ToolId) => void }) {
+  const t = useT();
   return (
     <ScrollView contentContainerStyle={s.main}>
       <View>
-        <Text style={[s.h1, { color: c.fg }]}>Što radimo danas?</Text>
-        <Text style={[s.sub, { color: c.muted }]}>Odaberi alat, AI napravi ostalo.</Text>
+        <Text style={[s.h1, { color: c.fg }]}>{t.homeTitle}</Text>
+        <Text style={[s.sub, { color: c.muted }]}>{t.homeSub}</Text>
       </View>
 
       <Pressable onPress={() => onOpen('image')} style={[s.hero, { backgroundColor: c.fg }]}>
         <Text style={{ fontSize: 30 }}>🎨</Text>
         <View style={{ flex: 1 }}>
-          <Text style={[s.heroTitle, { color: c.bg }]}>Slika iz opisa</Text>
-          <Text style={{ color: c.bg, opacity: 0.8 }}>Opiši što želiš, AI nacrta. Anime, 3D, foto…</Text>
+          <Text style={[s.heroTitle, { color: c.bg }]}>{t.heroTitle}</Text>
+          <Text style={{ color: c.bg, opacity: 0.8 }}>{t.heroSub}</Text>
         </View>
         <View style={[s.badge, { backgroundColor: c.sun }]}>
-          <Text style={{ color: c.sunFg, fontWeight: '800', fontSize: 11 }}>NOVO</Text>
+          <Text style={{ color: c.sunFg, fontWeight: '800', fontSize: 11 }}>{t.badgeNew}</Text>
         </View>
       </Pressable>
 
       <View style={s.grid}>
-        {TEXT_TOOLS.map((t) => (
-          <Pressable key={t.id} onPress={() => onOpen(t.id)} style={[s.tile, { backgroundColor: c.card, borderColor: c.line }]}>
-            <Text style={{ fontSize: 26 }}>{t.icon}</Text>
-            <Text style={[s.tileName, { color: c.fg }]}>{t.name}</Text>
-            <Text style={{ color: c.muted, fontSize: 13 }}>{t.blurb}</Text>
+        {TEXT_TOOLS.map((tool) => (
+          <Pressable key={tool.id} onPress={() => onOpen(tool.id)} style={[s.tile, { backgroundColor: c.card, borderColor: c.line }]}>
+            <Text style={{ fontSize: 26 }}>{tool.icon}</Text>
+            <Text style={[s.tileName, { color: c.fg }]}>{t.tools[tool.id].name}</Text>
+            <Text style={{ color: c.muted, fontSize: 13 }}>{t.tools[tool.id].blurb}</Text>
           </Pressable>
         ))}
       </View>
@@ -254,17 +286,20 @@ function Home({ c, onOpen }: { c: Colors; onOpen: (id: ToolId) => void }) {
 }
 
 function BackRow({ c, onBack }: { c: Colors; onBack: () => void }) {
+  const t = useT();
   return (
     <Pressable onPress={onBack} style={s.back} accessibilityRole="button">
-      <Text style={{ color: c.accent, fontWeight: '700', fontSize: 15 }}>‹ Svi alati</Text>
+      <Text style={{ color: c.accent, fontWeight: '700', fontSize: 15 }}>{t.back}</Text>
     </Pressable>
   );
 }
 
 function Chips({ field, value, onChange, c }: { field: Field; value: string; onChange: (v: string) => void; c: Colors }) {
+  const lang = useLang();
+  const t = STRINGS[lang];
   return (
     <View>
-      <Text style={[s.label, { color: c.muted }]}>{field.label.toUpperCase()}</Text>
+      <Text style={[s.label, { color: c.muted }]}>{(t.fields[field.label] ?? field.label).toUpperCase()}</Text>
       <View style={s.chips}>
         {field.options.map((o) => {
           const on = value === o;
@@ -274,7 +309,7 @@ function Chips({ field, value, onChange, c }: { field: Field; value: string; onC
               onPress={() => onChange(o)}
               style={[s.chip, { borderColor: on ? c.fg : c.line, backgroundColor: on ? c.fg : 'transparent' }]}
             >
-              <Text style={[s.chipText, { color: on ? c.bg : c.fg }]}>{o}</Text>
+              <Text style={[s.chipText, { color: on ? c.bg : c.fg }]}>{optionLabel(lang, o)}</Text>
             </Pressable>
           );
         })}
@@ -286,8 +321,11 @@ function Chips({ field, value, onChange, c }: { field: Field; value: string; onC
 function Generator({ tool, c, onBack, onRemaining, onLimit }: {
   tool: TextTool; c: Colors; onBack: () => void; onRemaining: (n: number | null) => void; onLimit: () => void;
 }) {
+  const lang = useLang();
+  const t = STRINGS[lang];
+  const tt = t.tools[tool.id];
   const [input, setInput] = useState('');
-  const [options, setOptions] = useState<Record<string, string>>(() => defaults(tool.fields));
+  const [options, setOptions] = useState<Record<string, string>>(() => defaults(tool.fields, lang));
   const [photo, setPhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -300,11 +338,11 @@ function Generator({ tool, c, onBack, onRemaining, onLimit }: {
 
   async function run() {
     if (tool.photo === 'required' && !photo) {
-      setError('Prvo odaberi fotku.');
+      setError(t.needPhoto);
       return;
     }
     if (!input.trim() && !photo && tool.id !== 'wish') {
-      setError('Napiši nešto u polje iznad.');
+      setError(t.needText);
       return;
     }
     setLoading(true);
@@ -312,20 +350,20 @@ function Generator({ tool, c, onBack, onRemaining, onLimit }: {
     try {
       const r = await generate({
         mode: tool.id,
-        input: input.trim() || (tool.id === 'wish' ? 'nema dodatnih detalja' : ''),
+        lang,
+        input: input.trim() || (tool.id === 'wish' ? t.noDetails : ''),
         options,
         image: photo?.base64 ? { base64: photo.base64, mediaType: photo.mimeType ?? 'image/jpeg' } : undefined,
       });
       setResult(r);
       onRemaining(r.remaining);
     } catch (e) {
-      const err = asError(e);
-      if (err.code === 'limit') {
+      if (e instanceof ApiError && e.code === 'limit') {
         onRemaining(0);
         onLimit();
         return;
       }
-      setError(err.message);
+      setError(errorText(e, t));
     } finally {
       setLoading(false);
     }
@@ -336,25 +374,25 @@ function Generator({ tool, c, onBack, onRemaining, onLimit }: {
       <ScrollView contentContainerStyle={s.main} keyboardShouldPersistTaps="handled">
         <BackRow c={c} onBack={onBack} />
         <View>
-          <Text style={[s.h1, { color: c.fg }]}>{tool.icon} {tool.title}</Text>
-          <Text style={[s.sub, { color: c.muted }]}>{tool.subtitle}</Text>
+          <Text style={[s.h1, { color: c.fg }]}>{tool.icon} {tt.title}</Text>
+          <Text style={[s.sub, { color: c.muted }]}>{tt.subtitle}</Text>
         </View>
 
         {tool.photo && (
           <Pressable onPress={pickPhoto} style={[s.photo, { borderColor: tool.photo === 'required' && !photo ? c.accent : c.line }]}>
             {photo ? <Image source={{ uri: photo.uri }} style={s.thumb} /> : <Text style={{ fontSize: 22 }}>📷</Text>}
             <Text style={[s.photoText, { color: c.muted }]}>
-              {photo ? 'Promijeni fotku' : tool.photo === 'required' ? 'Odaberi fotku' : 'Dodaj fotku (nije obavezno)'}
+              {photo ? t.photoChange : tool.photo === 'required' ? t.photoChoose : t.photoOptional}
             </Text>
           </Pressable>
         )}
 
         <View>
-          <Text style={[s.label, { color: c.muted }]}>{tool.inputLabel.toUpperCase()}</Text>
+          <Text style={[s.label, { color: c.muted }]}>{tt.inputLabel.toUpperCase()}</Text>
           <TextInput
             value={input}
             onChangeText={setInput}
-            placeholder={tool.placeholder}
+            placeholder={tt.placeholder}
             placeholderTextColor={c.muted}
             multiline
             maxLength={1000}
@@ -367,19 +405,20 @@ function Generator({ tool, c, onBack, onRemaining, onLimit }: {
         ))}
 
         <Pressable onPress={run} disabled={loading} style={[s.go, { backgroundColor: c.accent, opacity: loading ? 0.6 : 1 }]}>
-          {loading ? <ActivityIndicator color={c.accentFg} /> : <Text style={[s.goText, { color: c.accentFg }]}>{tool.button}</Text>}
+          {loading ? <ActivityIndicator color={c.accentFg} /> : <Text style={[s.goText, { color: c.accentFg }]}>{tt.button}</Text>}
         </Pressable>
 
         {!!error && <Text style={[s.sub, { color: c.muted }]}>{error}</Text>}
 
         {result?.items.map((item, i) => <ResultCard key={i} tool={tool.id} tag={item.tag} text={item.text} c={c} />)}
-        {!!result?.hashtags && <ResultCard tool={tool.id} tag="Hashtagovi" text={result.hashtags} c={c} muted />}
+        {!!result?.hashtags && <ResultCard tool={tool.id} tag={t.hashtags} text={result.hashtags} c={c} muted />}
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 function ResultCard({ tool, tag, text, c, muted }: { tool: string; tag: string; text: string; c: Colors; muted?: boolean }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
   return (
@@ -394,7 +433,7 @@ function ResultCard({ tool, tag, text, c, muted }: { tool: string; tag: string; 
           }}
           style={[s.small, { borderColor: saved ? c.ok : c.line }]}
         >
-          <Text style={{ color: saved ? c.ok : c.fg, fontWeight: '600', fontSize: 13 }}>{saved ? 'Spremljeno ✓' : 'Spremi'}</Text>
+          <Text style={{ color: saved ? c.ok : c.fg, fontWeight: '600', fontSize: 13 }}>{saved ? t.saved : t.save}</Text>
         </Pressable>
         <Pressable
           onPress={async () => {
@@ -403,7 +442,7 @@ function ResultCard({ tool, tag, text, c, muted }: { tool: string; tag: string; 
           }}
           style={[s.small, { borderColor: copied ? c.ok : c.line }]}
         >
-          <Text style={{ color: copied ? c.ok : c.fg, fontWeight: '600', fontSize: 13 }}>{copied ? 'Kopirano ✓' : 'Kopiraj'}</Text>
+          <Text style={{ color: copied ? c.ok : c.fg, fontWeight: '600', fontSize: 13 }}>{copied ? t.copied : t.copy}</Text>
         </Pressable>
       </View>
     </View>
@@ -415,8 +454,10 @@ async function shareFile(uri: string) {
 }
 
 function ImageTool({ c, onBack, onLimit }: { c: Colors; onBack: () => void; onLimit: () => void }) {
+  const lang = useLang();
+  const t = STRINGS[lang];
   const [input, setInput] = useState('');
-  const [options, setOptions] = useState<Record<string, string>>(() => defaults(IMAGE_FIELDS));
+  const [options, setOptions] = useState<Record<string, string>>(() => defaults(IMAGE_FIELDS, lang));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [left, setLeft] = useState<number | null>(FREE_IMAGES_PER_DAY);
@@ -425,25 +466,20 @@ function ImageTool({ c, onBack, onLimit }: { c: Colors; onBack: () => void; onLi
 
   async function run() {
     if (!input.trim()) {
-      setError('Opiši što želiš na slici.');
+      setError(t.imgNeedText);
       return;
     }
     setLoading(true);
     setError('');
     try {
-      const r = await generateImage(input.trim(), options);
+      const r = await generateImage(input.trim(), options, lang);
       const uri = writeImageFile(r.image, r.mimeType);
       setImg({ base64: r.image, mimeType: r.mimeType, uri, prompt: input.trim() });
       setSaved(false);
       setLeft(r.remaining);
     } catch (e) {
-      const err = asError(e);
-      if (err.code === 'limit') {
-        setLeft(0);
-        setError(err.message);
-        return;
-      }
-      setError(err.message);
+      if (e instanceof ApiError && e.code === 'limit') setLeft(0);
+      setError(errorText(e, t));
     } finally {
       setLoading(false);
     }
@@ -456,19 +492,20 @@ function ImageTool({ c, onBack, onLimit }: { c: Colors; onBack: () => void; onLi
       <ScrollView contentContainerStyle={s.main} keyboardShouldPersistTaps="handled">
         <BackRow c={c} onBack={onBack} />
         <View>
-          <Text style={[s.h1, { color: c.fg }]}>🎨 Slika iz opisa</Text>
+          <Text style={[s.h1, { color: c.fg }]}>🎨 {t.heroTitle}</Text>
           <Text style={[s.sub, { color: c.muted }]}>
-            Opiši sliku, AI je nacrta. {left === null ? '' : left > 0 ? `Danas možeš još ${left}.` : 'Za danas su slike potrošene.'}
-            {'\n'}Besplatnih slika ima ograničen broj svaki dan za sve korisnike, tko prvi, njegova. 😉
+            {t.imgSub} {left === null ? '' : left > 0 ? t.imgLeft(left) : t.imgNoneLeft}
+            {'\n'}
+            {t.imgPoolNote}
           </Text>
         </View>
 
         <View>
-          <Text style={[s.label, { color: c.muted }]}>ŠTO ŽELIŠ NA SLICI?</Text>
+          <Text style={[s.label, { color: c.muted }]}>{t.imgInputLabel.toUpperCase()}</Text>
           <TextInput
             value={input}
             onChangeText={setInput}
-            placeholder="npr. mačka s sunčanim naočalama na skuteru u Splitu, zalazak sunca"
+            placeholder={t.imgPlaceholder}
             placeholderTextColor={c.muted}
             multiline
             maxLength={1000}
@@ -482,17 +519,17 @@ function ImageTool({ c, onBack, onLimit }: { c: Colors; onBack: () => void; onLi
 
         {left === 0 ? (
           <Pressable onPress={onLimit} style={[s.go, { backgroundColor: c.sun }]}>
-            <Text style={[s.goText, { color: c.sunFg }]}>Više slika uz Premium 👑</Text>
+            <Text style={[s.goText, { color: c.sunFg }]}>{t.imgMorePremium}</Text>
           </Pressable>
         ) : (
           <Pressable onPress={run} disabled={loading} style={[s.go, { backgroundColor: c.accent, opacity: loading ? 0.6 : 1 }]}>
             {loading ? (
               <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
                 <ActivityIndicator color={c.accentFg} />
-                <Text style={{ color: c.accentFg, fontWeight: '600' }}>Crtam… (do 30 s)</Text>
+                <Text style={{ color: c.accentFg, fontWeight: '600' }}>{t.imgDrawing}</Text>
               </View>
             ) : (
-              <Text style={[s.goText, { color: c.accentFg }]}>Nacrtaj 🎨</Text>
+              <Text style={[s.goText, { color: c.accentFg }]}>{t.imgDraw}</Text>
             )}
           </Pressable>
         )}
@@ -511,10 +548,10 @@ function ImageTool({ c, onBack, onLimit }: { c: Colors; onBack: () => void; onLi
                 disabled={saved}
                 style={[s.small, { borderColor: saved ? c.ok : c.line }]}
               >
-                <Text style={{ color: saved ? c.ok : c.fg, fontWeight: '600', fontSize: 13 }}>{saved ? 'Spremljeno ✓' : 'Spremi'}</Text>
+                <Text style={{ color: saved ? c.ok : c.fg, fontWeight: '600', fontSize: 13 }}>{saved ? t.saved : t.save}</Text>
               </Pressable>
               <Pressable onPress={() => shareFile(img.uri)} style={[s.small, { borderColor: c.line }]}>
-                <Text style={{ color: c.fg, fontWeight: '600', fontSize: 13 }}>Podijeli / spremi u galeriju</Text>
+                <Text style={{ color: c.fg, fontWeight: '600', fontSize: 13 }}>{t.shareSave}</Text>
               </Pressable>
             </View>
           </View>
@@ -525,6 +562,7 @@ function ImageTool({ c, onBack, onLimit }: { c: Colors; onBack: () => void; onLi
 }
 
 function Saved({ c }: { c: Colors }) {
+  const t = useT();
   const [items, setItems] = useState<SavedItem[] | null>(null);
   const refresh = useCallback(() => {
     loadSaved().then(setItems);
@@ -536,15 +574,14 @@ function Saved({ c }: { c: Colors }) {
   return (
     <ScrollView contentContainerStyle={s.main}>
       <View>
-        <Text style={[s.h1, { color: c.fg }]}>Spremljeno</Text>
-        <Text style={[s.sub, { color: c.muted }]}>
-          {items.length ? 'Tvoji najdraži tekstovi i slike.' : 'Još ništa. Kod svakog rezultata dodirni "Spremi" i pojavit će se ovdje.'}
-        </Text>
+        <Text style={[s.h1, { color: c.fg }]}>{t.savedTitle}</Text>
+        <Text style={[s.sub, { color: c.muted }]}>{items.length ? t.savedSub : t.savedEmpty}</Text>
       </View>
       {items.map((item) => (
         <View key={item.id} style={[s.card, { backgroundColor: c.card, borderColor: c.line }]}>
           <Text style={[s.tag, { color: c.accent }]}>
-            {toolName(item.tool).toUpperCase()}{item.type === 'text' && item.tag ? ` · ${item.tag.toUpperCase()}` : ''}
+            {(t.tools[item.tool as ToolId]?.name ?? item.tool).toUpperCase()}
+            {item.type === 'text' && item.tag ? ` · ${item.tag.toUpperCase()}` : ''}
           </Text>
           {item.type === 'text' ? (
             <Text selectable style={[s.cardText, { color: c.fg }]}>{item.text}</Text>
@@ -562,15 +599,15 @@ function Saved({ c }: { c: Colors }) {
               }}
               style={[s.small, { borderColor: c.line }]}
             >
-              <Text style={{ color: c.muted, fontWeight: '600', fontSize: 13 }}>Obriši</Text>
+              <Text style={{ color: c.muted, fontWeight: '600', fontSize: 13 }}>{t.remove}</Text>
             </Pressable>
             {item.type === 'text' ? (
               <Pressable onPress={() => Clipboard.setStringAsync(item.text)} style={[s.small, { borderColor: c.line }]}>
-                <Text style={{ color: c.fg, fontWeight: '600', fontSize: 13 }}>Kopiraj</Text>
+                <Text style={{ color: c.fg, fontWeight: '600', fontSize: 13 }}>{t.copy}</Text>
               </Pressable>
             ) : (
               <Pressable onPress={() => shareFile(item.uri)} style={[s.small, { borderColor: c.line }]}>
-                <Text style={{ color: c.fg, fontWeight: '600', fontSize: 13 }}>Podijeli</Text>
+                <Text style={{ color: c.fg, fontWeight: '600', fontSize: 13 }}>{t.share}</Text>
               </Pressable>
             )}
           </View>
@@ -581,19 +618,20 @@ function Saved({ c }: { c: Colors }) {
 }
 
 function Premium({ c }: { c: Colors }) {
+  const t = useT();
   const [plan, setPlan] = useState<'m' | 'y'>('y');
   return (
     <ScrollView contentContainerStyle={s.main}>
       <View style={[s.proHero, { backgroundColor: c.fg }]}>
         <Text style={[s.proTitle, { color: c.bg }]}>Vajb Premium</Text>
-        {['Neograničeno tekstova', '20 slika dnevno', 'Bez reklama', 'Novi alati prvi'].map((t) => (
-          <Text key={t} style={{ color: c.bg, fontSize: 15 }}>•  {t}</Text>
+        {t.proPerks.map((p) => (
+          <Text key={p} style={{ color: c.bg, fontSize: 15 }}>•  {p}</Text>
         ))}
       </View>
       <View style={s.plans}>
         {([
-          ['m', 'Mjesečno', '3,99 €', 'otkaži kad želiš'],
-          ['y', 'Godišnje · −48%', '24,99 €', '2,08 € mjesečno'],
+          ['m', t.monthly, '3,99 €', t.cancelAnytime],
+          ['y', t.yearly, '24,99 €', t.perMonth],
         ] as const).map(([key, name, price, note]) => (
           <Pressable key={key} onPress={() => setPlan(key)} style={[s.plan, { backgroundColor: c.card, borderColor: plan === key ? c.accent : c.line }]}>
             <Text style={{ color: c.muted, fontSize: 13 }}>{name}</Text>
@@ -603,11 +641,9 @@ function Premium({ c }: { c: Colors }) {
         ))}
       </View>
       <View style={[s.go, { backgroundColor: c.accent, opacity: 0.6 }]}>
-        <Text style={[s.goText, { color: c.accentFg }]}>Uskoro</Text>
+        <Text style={[s.goText, { color: c.accentFg }]}>{t.soon}</Text>
       </View>
-      <Text style={[s.sub, { color: c.muted }]}>
-        Premium stiže uskoro. Do tada imaš {FREE_TEXT_PER_DAY} besplatnih tekstova i {FREE_IMAGES_PER_DAY} sliku svaki dan, dok ima besplatnih mjesta za taj dan.
-      </Text>
+      <Text style={[s.sub, { color: c.muted }]}>{t.proNote(FREE_TEXT_PER_DAY)}</Text>
     </ScrollView>
   );
 }
@@ -615,7 +651,11 @@ function Premium({ c }: { c: Colors }) {
 const s = StyleSheet.create({
   root: { flex: 1 },
   header: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   logo: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
+  langBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 99, paddingHorizontal: 8, paddingVertical: 4 },
+  langMenu: { marginHorizontal: 16, marginBottom: 8, borderWidth: 1, borderRadius: 14, padding: 6 },
+  langItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 10, paddingVertical: 9, borderRadius: 10 },
   credits: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 99 },
   creditsText: { fontSize: 13, fontWeight: '700' },
   main: { padding: 16, gap: 16 },

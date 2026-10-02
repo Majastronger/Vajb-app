@@ -7,11 +7,13 @@ import {
   buildImagePrompt,
   buildPrompt,
   IMAGE_PROMPT_SCHEMA,
+  LANGS,
   OUTPUT_SCHEMA,
   parseRequest,
   SYSTEM,
   type TextMode,
 } from './prompts.ts';
+import { MSG } from './messages.ts';
 
 // Daily limits per kind. null = unlimited.
 const LIMITS = {
@@ -77,22 +79,24 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return fail(405, 'method', 'Samo POST.');
 
+  const body = await req.json().catch(() => null);
+  const m = MSG[LANGS.find((l) => l === (body as { lang?: unknown } | null)?.lang) ?? 'hr'];
+
   // Who is asking (anonymous Supabase user).
   const jwt = req.headers.get('Authorization')?.replace('Bearer ', '') ?? '';
   const { data: auth } = await admin.auth.getUser(jwt);
   const userId = auth.user?.id;
-  if (!userId) return fail(401, 'auth', 'Prijava nije uspjela. Zatvori i ponovno otvori aplikaciju.');
+  if (!userId) return fail(401, 'auth', m.auth);
 
-  const body = await req.json().catch(() => null);
   const parsed = parseRequest(body);
-  if (typeof parsed === 'string') return fail(400, 'bad_request', parsed);
+  if ('error' in parsed) return fail(400, 'bad_request', m[parsed.error]);
 
   let photo: { data: string; media_type: ImageType } | null = null;
   if (parsed.hasImage) {
     const img = (body as { image?: { base64?: unknown; mediaType?: unknown } }).image;
     const type = IMAGE_TYPES.find((t) => t === img?.mediaType);
-    if (typeof img?.base64 !== 'string' || !type) return fail(400, 'bad_image', 'Ova vrsta slike nije podržana.');
-    if (img.base64.length > MAX_IMAGE_BASE64) return fail(400, 'bad_image', 'Slika je prevelika.');
+    if (typeof img?.base64 !== 'string' || !type) return fail(400, 'bad_image', m.bad_image);
+    if (img.base64.length > MAX_IMAGE_BASE64) return fail(400, 'bad_image', m.image_too_big);
     photo = { data: img.base64, media_type: type };
   }
 
@@ -108,20 +112,18 @@ Deno.serve(async (req) => {
 
   if (!premium) {
     const { data: usedToday, error } = await admin.rpc('usage_today', { p_kind: kind });
-    if (error) return fail(500, 'server', 'Nešto je pošlo po zlu. Probaj opet.');
+    if (error) return fail(500, 'server', m.server);
     if (usedToday >= DAILY_FREE_CAP[kind]) {
-      const what = kind === 'image' ? 'Današnje besplatne slike' : 'Današnja besplatna generiranja';
-      return fail(429, 'sold_out', `${what} su razgrabljene za sve korisnike. Vrati se sutra 💛`, { kind });
+      return fail(429, 'sold_out', kind === 'image' ? m.sold_out_image : m.sold_out_text, { kind });
     }
   }
 
   let remaining: number | null = null;
   if (limit !== null) {
     const { data: left, error } = await admin.rpc('take_credit', { p_user: userId, p_limit: limit, p_kind: kind });
-    if (error) return fail(500, 'server', 'Nešto je pošlo po zlu. Probaj opet.');
+    if (error) return fail(500, 'server', m.server);
     if (left < 0) {
-      const what = kind === 'image' ? (limit === 1 ? 'besplatnu sliku' : 'slike') : 'besplatna generiranja';
-      return fail(429, 'limit', `Za danas si potrošio/la ${what}. Vrati se sutra ili probaj Premium.`, { remaining: 0, kind });
+      return fail(429, 'limit', kind === 'image' ? m.limit_image : m.limit_text, { remaining: 0, kind });
     }
     remaining = left;
   }
@@ -173,12 +175,12 @@ Deno.serve(async (req) => {
   } catch (e) {
     await refund();
     if (e instanceof Refused) {
-      return fail(422, 'refused', 'Ovo ne mogu napraviti. Probaj drugačiji opis, bez stvarnih osoba i neprimjerenog sadržaja.');
+      return fail(422, 'refused', m.refused);
     }
     if (e instanceof Anthropic.RateLimitError) {
-      return fail(503, 'busy', 'Puno je ljudi trenutno. Probaj za minutu.');
+      return fail(503, 'busy', m.busy);
     }
     console.error('generate failed', e);
-    return fail(502, 'server', 'Nešto je pošlo po zlu. Probaj opet.');
+    return fail(502, 'server', m.server);
   }
 });

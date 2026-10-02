@@ -17,6 +17,7 @@ export type Mode = 'caption' | 'reply' | 'bio' | 'reel' | 'wish' | 'rate';
 
 export type GenerateRequest = {
   mode: Mode;
+  lang: string;
   input: string;
   options: Record<string, string>;
   image?: { base64: string; mediaType: string };
@@ -43,13 +44,13 @@ export class ApiError extends Error {
 }
 
 async function ensureSession() {
-  if (!supabase) throw new ApiError('not_configured', 'Server nije podešen.');
+  if (!supabase) throw new ApiError('not_configured', '');
   const { data } = await supabase.auth.getSession();
   if (data.session) return;
   const { error } = await supabase.auth.signInAnonymously();
   if (error) {
     const offline = error.message?.toLowerCase().includes('network');
-    throw new ApiError('auth', offline ? 'Nema interneta. Provjeri vezu pa probaj opet.' : 'Prijava na server nije uspjela. Probaj za par minuta.');
+    throw new ApiError(offline ? 'offline' : 'sign_in', '');
   }
 }
 
@@ -59,9 +60,9 @@ async function call<T>(body: object): Promise<T> {
   if (error) {
     if (error instanceof FunctionsHttpError) {
       const body = await error.context.json().catch(() => null);
-      throw new ApiError(body?.code ?? 'server', body?.message ?? 'Nešto je pošlo po zlu. Probaj opet.', body?.remaining);
+      throw new ApiError(body?.code ?? 'server', body?.message ?? '', body?.remaining);
     }
-    throw new ApiError('network', 'Nema veze sa serverom. Provjeri internet pa probaj opet.');
+    throw new ApiError('offline', '');
   }
   return data as T;
 }
@@ -70,6 +71,6 @@ export function generate(req: GenerateRequest): Promise<GenerateResult> {
   return call<GenerateResult>(req);
 }
 
-export function generateImage(input: string, options: Record<string, string>): Promise<ImageResult> {
-  return call<ImageResult>({ mode: 'image', input, options });
+export function generateImage(input: string, options: Record<string, string>, lang: string): Promise<ImageResult> {
+  return call<ImageResult>({ mode: 'image', input, options, lang });
 }
