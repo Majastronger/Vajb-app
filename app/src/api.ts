@@ -13,7 +13,7 @@ const supabase = configured
     })
   : null;
 
-export type Mode = 'caption' | 'reply' | 'bio' | 'reel' | 'wish' | 'rate';
+export type Mode = 'caption' | 'reply' | 'bio' | 'reel' | 'wish' | 'rate' | 'vibe' | 'story' | 'plan';
 
 export type GenerateRequest = {
   mode: Mode;
@@ -36,6 +36,8 @@ export type ImageResult = {
   mimeType: string;
   remaining: number | null;
 };
+
+export type Daily = { caption: string; trend: string; quote: string; challenge: string };
 
 export class ApiError extends Error {
   constructor(public code: string, message: string, public remaining?: number) {
@@ -73,4 +75,18 @@ export function generate(req: GenerateRequest): Promise<GenerateResult> {
 
 export function generateImage(input: string, options: Record<string, string>, lang: string): Promise<ImageResult> {
   return call<ImageResult>({ mode: 'image', input, options, lang });
+}
+
+export function editImage(
+  photo: { base64: string; mediaType: string },
+  input: string,
+  options: Record<string, string>,
+  lang: string,
+): Promise<ImageResult> {
+  return call<ImageResult>({ mode: 'edit', input, options, lang, image: photo });
+}
+
+// Inspiration of the day; free, the server makes it once per day and language.
+export function getDaily(lang: string): Promise<Daily> {
+  return call<Daily>({ mode: 'daily', lang });
 }

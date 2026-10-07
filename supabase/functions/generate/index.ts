@@ -4,13 +4,17 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 
 import {
   ASPECT,
+  buildDailyPrompt,
+  buildEditPrompt,
   buildImagePrompt,
   buildPrompt,
+  DAILY_SCHEMA,
   IMAGE_PROMPT_SCHEMA,
   LANGS,
   OUTPUT_SCHEMA,
   parseRequest,
   SYSTEM,
+  type Lang,
   type TextMode,
 } from './prompts.ts';
 import { MSG } from './messages.ts';
@@ -52,6 +56,39 @@ const fail = (status: number, code: string, message: string, extra: object = {})
 
 class Refused extends Error {}
 
+// Daily inspiration: made once per day and language, then served from the table to everyone.
+// It does not use anyone's credits.
+async function daily(lang: Lang) {
+  const now = new Date();
+  const day = now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Zagreb' });
+  const { data: row } = await admin.from('daily_content').select('content').eq('day', day).eq('lang', lang).maybeSingle();
+  if (row) return row.content;
+  const weekday = now.toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'Europe/Zagreb' });
+  const content = await askClaude(SYSTEM, [{ type: 'text', text: buildDailyPrompt(lang, day, weekday) }], DAILY_SCHEMA);
+  await admin.from('daily_content').upsert({ day, lang, content }, { onConflict: 'day,lang', ignoreDuplicates: true });
+  return content;
+}
+
+async function drawImage(contents: unknown, aspectRatio?: string) {
+  const googleKey = Deno.env.get('GOOGLE_API_KEY');
+  if (!googleKey) throw new Error('GOOGLE_API_KEY is not set');
+  const result = await new GoogleGenAI({ apiKey: googleKey }).models.generateContent({
+    model: IMAGE_MODEL,
+    // deno-lint-ignore no-explicit-any
+    contents: contents as any,
+    config: {
+      responseModalities: [Modality.IMAGE],
+      ...(aspectRatio ? { imageConfig: { aspectRatio } } : {}),
+    },
+  });
+  const image = result.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData;
+  if (!image?.data) {
+    console.error('no image returned', result.candidates?.[0]?.finishReason, result.promptFeedback?.blockReason);
+    throw new Refused();
+  }
+  return { image: image.data, mimeType: image.mimeType ?? 'image/png' };
+}
+
 async function askClaude(
   system: string,
   content: Anthropic.Beta.BetaContentBlockParam[],
@@ -91,6 +128,15 @@ Deno.serve(async (req) => {
   const parsed = parseRequest(body);
   if ('error' in parsed) return fail(400, 'bad_request', m[parsed.error]);
 
+  if (parsed.mode === 'daily') {
+    try {
+      return reply(200, await daily(parsed.lang));
+    } catch (e) {
+      console.error('daily failed', e);
+      return fail(502, 'server', m.server);
+    }
+  }
+
   let photo: { data: string; media_type: ImageType } | null = null;
   if (parsed.hasImage) {
     const img = (body as { image?: { base64?: unknown; mediaType?: unknown } }).image;
@@ -101,7 +147,7 @@ Deno.serve(async (req) => {
   }
 
   // Daily credits, separate for text and images.
-  const kind: Kind = parsed.mode === 'image' ? 'image' : 'text';
+  const kind: Kind = parsed.mode === 'image' || parsed.mode === 'edit' ? 'image' : 'text';
   const { data: profile } = await admin
     .from('profiles')
     .select('is_premium, premium_until')
@@ -141,26 +187,25 @@ Deno.serve(async (req) => {
       )) as { allowed: boolean; prompt: string };
       if (!plan.allowed || !plan.prompt) throw new Refused();
 
-      const googleKey = Deno.env.get('GOOGLE_API_KEY');
-      if (!googleKey) throw new Error('GOOGLE_API_KEY is not set');
-      const result = await new GoogleGenAI({ apiKey: googleKey }).models.generateContent({
-        model: IMAGE_MODEL,
-        contents: plan.prompt,
-        config: {
-          responseModalities: [Modality.IMAGE],
-          imageConfig: { aspectRatio: ASPECT[parsed.options.format] ?? '1:1' },
-        },
-      });
-      const image = result.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData;
-      if (!image?.data) {
-        console.error('no image returned', result.candidates?.[0]?.finishReason, result.promptFeedback?.blockReason);
-        throw new Refused();
-      }
-      return reply(200, {
-        image: image.data,
-        mimeType: image.mimeType ?? 'image/png',
-        remaining,
-      });
+      const out = await drawImage(plan.prompt, ASPECT[parsed.options.format] ?? '1:1');
+      return reply(200, { ...out, remaining });
+    }
+
+    if (parsed.mode === 'edit' && photo) {
+      const plan = (await askClaude(
+        'You check photo edit requests for safety and write prompts for an image-editing model.',
+        [
+          { type: 'image', source: { type: 'base64', ...photo } },
+          { type: 'text', text: buildEditPrompt(parsed) },
+        ],
+        IMAGE_PROMPT_SCHEMA,
+      )) as { allowed: boolean; prompt: string };
+      if (!plan.allowed || !plan.prompt) throw new Refused();
+      const out = await drawImage([
+        { inlineData: { mimeType: photo.media_type, data: photo.data } },
+        { text: plan.prompt },
+      ]);
+      return reply(200, { ...out, remaining });
     }
 
     const out = (await askClaude(

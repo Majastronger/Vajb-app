@@ -2,7 +2,7 @@
 // OPTION_LABELS only changes what the user sees.
 
 export type Lang = 'hr' | 'bs' | 'sr' | 'de' | 'en';
-export type ToolId = 'caption' | 'reply' | 'bio' | 'reel' | 'wish' | 'rate' | 'image';
+export type ToolId = 'caption' | 'reply' | 'bio' | 'reel' | 'wish' | 'rate' | 'vibe' | 'story' | 'plan' | 'image' | 'edit' | 'fonts' | 'tags';
 
 export const LANGS: { id: Lang; label: string; flag: string }[] = [
   { id: 'hr', label: 'Hrvatski', flag: '🇭🇷' },
@@ -47,13 +47,52 @@ type Strings = {
   savedTitle: string; savedSub: string; savedEmpty: string;
   proPerks: string[]; monthly: string; yearly: string; cancelAnytime: string; perMonth: string; soon: string;
   proNote: (texts: number) => string;
+  proActive: string;
   language: string;
   noDetails: string;
+  greeting: (hour: number) => string; streak: (days: number) => string;
+  dailyTitle: string; dailyCaption: string; dailyTrend: string; dailyQuote: string; dailyChallenge: string; dailyLoading: string; dailyError: string;
+  sectionTools: string; tryThis: string;
+  editHeroTitle: string; editHeroSub: string; editSub: string; editPhoto: string; editInputLabel: string; editPlaceholder: string;
+  editDo: string; editDoing: string; editNeedPhoto: string; editNeedText: string; editConsent: string;
+  examples: Partial<Record<ToolId, string[]>>;
+  sectionFree: string; inviteName: string; inviteBlurb: string; inviteMessage: (url: string) => string;
+  fontsInputLabel: string; fontsPlaceholder: string; fontsTab: string; symbolsTab: string; tapToCopy: string;
+  symbolGroups: Record<'hearts' | 'stars' | 'dividers' | 'kaomoji' | 'shapes', string>;
   tools: Record<ToolId, ToolText>;
   fields: Record<string, string>;
 };
 
+// 1 dan, 2 dana, 5 dana, 21 dan…
+const danHr = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'dan' : 'dana');
+
 const hr: Strings = {
+  sectionFree: 'Besplatno, bez limita', inviteName: 'Pozovi prijatelja', inviteBlurb: 'Pošalji Vajb ekipi',
+  inviteMessage: (u) => `Probaj Vajb AI ✨ AI pomoćnik za Instagram i TikTok: opisi, odgovori na poruke, slike i fontovi za bio. 👉 ${u}`,
+  fontsInputLabel: 'Tvoj tekst', fontsPlaceholder: 'npr. tvoje ime ili rečenica za bio', fontsTab: 'Fontovi', symbolsTab: 'Simboli i kaomoji', tapToCopy: 'Dodirni za kopiranje',
+  symbolGroups: { hearts: 'Srca', stars: 'Zvjezdice', dividers: 'Razdjelnici', kaomoji: 'Kaomoji', shapes: 'Strelice i oblici' },
+  greeting: (h) => (h < 11 ? 'Dobro jutro ☀️' : h < 18 ? 'Bok! 👋' : 'Dobra večer 🌙'),
+  streak: (n) => `🔥 ${n} ${danHr(n)}`,
+  dailyTitle: 'Inspiracija dana', dailyCaption: 'Opis dana', dailyTrend: 'Video ideja dana', dailyQuote: 'Misao dana', dailyChallenge: 'Izazov dana',
+  dailyLoading: 'Tražim inspiraciju…', dailyError: 'Inspiracija trenutno nije dostupna.',
+  sectionTools: 'Svi alati', tryThis: 'Probaj:',
+  editHeroTitle: 'Uredi svoju fotku', editHeroSub: 'Stavi se na plažu, u anime ili neon svijet.',
+  editSub: 'Dodaj svoju fotku i reci što da AI promijeni. Troši 1 sliku.', editPhoto: 'Dodaj svoju fotku',
+  editInputLabel: 'Što da promijenim?', editPlaceholder: 'npr. stavi me na plažu na Hvaru, zalazak sunca',
+  editDo: 'Uredi fotku ✨', editDoing: 'Uređujem… (do 30 s)', editNeedPhoto: 'Prvo dodaj svoju fotku.', editNeedText: 'Napiši što da promijenim.',
+  editConsent: 'Koristi samo svoje fotke ili fotke osoba koje su ti to dopustile.',
+  examples: {
+    caption: ['Kava s prijateljicom ☕', 'Prvi dan godišnjeg 🌊', 'Novi outfit za izlazak'],
+    reply: ['Što radiš večeras? 😏', 'Oprosti što se nisam javio/la', 'Dolaziš u subotu na rođendan?'],
+    reel: ['Što jedem u jednom danu', 'Moja jutarnja rutina', 'Uređujem sobu na budžetu'],
+    wish: ['Mama, voli vrtlarenje i kavu', 'Najbolja prijateljica od vrtića'],
+    bio: ['Studentica, volim putovanja i kavu', 'Teretana, glazba i dobra hrana'],
+    story: ['Vikend na moru', 'Dan na poslu', 'Kuham večeru za ekipu'],
+    plan: ['Zagreb, volimo hranu', 'Kišni dan', 'Prvi spoj'],
+    image: ['Mačka u svemirskom odijelu na Mjesecu', 'Dubrovnik u zalazak sunca', 'Slatki zmaj pije kavu u kafiću'],
+    edit: ['Stavi me na plažu na Hvaru', 'Pretvori me u anime lik', 'Stavi me u Pariz kraj Eiffelova tornja'],
+  },
+  proActive: 'Premium je aktivan. Uživaj u neograničenim tekstovima i 20 slika dnevno! 👑',
   today: 'danas',
   navTools: 'Alati', navSaved: 'Spremljeno', navPremium: 'Premium',
   homeTitle: 'Što radimo danas?', homeSub: 'Odaberi alat, AI napravi ostalo.',
@@ -81,9 +120,15 @@ const hr: Strings = {
     wish: { name: 'Čestitka', blurb: 'Rođendan, ljubav, prijatelji', title: 'Čestitka ili posveta', subtitle: 'Odaberi priliku i dodaj par detalja, dobiješ osobnu poruku.', inputLabel: 'Za koga je i neki detalj (nije obavezno)', placeholder: 'npr. Ivana, najbolja prijateljica, volimo karaoke i kavu', button: 'Napiši poruku 💌' },
     rate: { name: 'Ocijeni fotku', blurb: 'Savjeti prije objave', title: 'Ocijeni moju fotku', subtitle: 'AI pogleda fotku i kaže kako je poboljšati prije objave.', inputLabel: 'Nešto dodatno (nije obavezno)', placeholder: 'npr. ne znam koji filter staviti', button: 'Ocijeni ⭐' },
     bio: { name: 'Bio za profil', blurb: 'Instagram, TikTok, dating', title: 'Bio za profil', subtitle: 'Napiši par riječi o sebi, dobiješ bio za Instagram ili TikTok.', inputLabel: 'O tebi', placeholder: 'npr. studentica, Zagreb, volim kavu, techno i putovanja', button: 'Napravi bio 🪄' },
+    vibe: { name: 'Vibe check', blurb: 'Koji je tvoj vibe?', title: 'Vibe check', subtitle: 'Dodaj fotku i AI ti kaže koji je tvoj vibe, boje i glazba koja ti paše.', inputLabel: 'Nešto dodatno (nije obavezno)', placeholder: 'npr. ovo je moja nova frizura', button: 'Provjeri vibe 🔮' },
+    story: { name: 'Story ideje', blurb: 'Instagram storyji', title: 'Ideje za Instagram story', subtitle: 'Reci o čemu, dobiješ niz storyja s anketama i pitanjima.', inputLabel: 'O čemu su storyji?', placeholder: 'npr. vikend na moru s ekipom', button: 'Smisli storyje 📱' },
+    plan: { name: 'Ideje za izlazak', blurb: 'Spoj, ekipa, vikend', title: 'Što da radimo?', subtitle: 'Odaberi s kim i budžet, dobiješ ideje za spoj ili izlazak.', inputLabel: 'Grad ili što volite (nije obavezno)', placeholder: 'npr. Zagreb, volimo hranu i glazbu', button: 'Daj ideje 🎉' },
     image: { name: 'Slika', blurb: '', title: 'Slika iz opisa', subtitle: '', inputLabel: '', placeholder: '', button: '' },
+    edit: { name: 'Uređena fotka', blurb: '', title: 'Uredi svoju fotku', subtitle: '', inputLabel: '', placeholder: '', button: '' },
+    fonts: { name: 'Fancy fontovi', blurb: 'Fontovi i simboli za bio', title: 'Fancy fontovi', subtitle: 'Upiši tekst i dodirni stil da ga kopiraš. Radi u Instagram i TikTok biju.', inputLabel: '', placeholder: '', button: '' },
+    tags: { name: 'Gotovi hashtagovi', blurb: 'Po temama, jedan klik', title: 'Gotovi hashtagovi', subtitle: 'Odaberi temu i dodirni da kopiraš hashtagove.', inputLabel: '', placeholder: '', button: '' },
   },
-  fields: { platform: 'Mreža', tone: 'Stil', language: 'Jezik', sender: 'Tko ti piše', length: 'Duljina', style: 'Stil', occasion: 'Prilika', purpose: 'Fotka je za', format: 'Format', for: 'Za', how: 'Kako želiš zvučati' },
+  fields: { platform: 'Mreža', tone: 'Stil', language: 'Jezik', sender: 'Tko ti piše', length: 'Duljina', style: 'Stil', occasion: 'Prilika', purpose: 'Fotka je za', format: 'Format', for: 'Za', how: 'Kako želiš zvučati', kind: 'Vrsta', who: 'S kim', budget: 'Budžet', place: 'Gdje' },
 };
 
 const bs: Strings = {
@@ -108,8 +153,28 @@ const bs: Strings = {
     wish: { ...hr.tools.wish, placeholder: 'npr. Amra, najbolja drugarica, volimo kafu i karaoke' },
     rate: { ...hr.tools.rate, name: 'Ocijeni fotografiju', title: 'Ocijeni moju fotografiju', subtitle: 'AI pogleda fotografiju i kaže kako je poboljšati prije objave.' },
     bio: { ...hr.tools.bio, placeholder: 'npr. studentica, Sarajevo, volim kafu, muziku i putovanja' },
+    vibe: { ...hr.tools.vibe, subtitle: 'Dodaj fotografiju i AI ti kaže koji je tvoj vibe, boje i muzika koja ti paše.', placeholder: 'npr. ovo je moja nova frizura' },
+    plan: { ...hr.tools.plan, title: 'Šta da radimo?', inputLabel: 'Grad ili šta volite (nije obavezno)', placeholder: 'npr. Sarajevo, volimo hranu i muziku' },
+    edit: { ...hr.tools.edit, name: 'Uređena fotografija', title: 'Uredi svoju fotografiju' },
   },
   fields: { ...hr.fields, sender: 'Ko ti piše', purpose: 'Fotografija je za' },
+  greeting: (h) => (h < 11 ? 'Dobro jutro ☀️' : h < 18 ? 'Zdravo! 👋' : 'Dobro veče 🌙'),
+  dailyLoading: 'Tražim inspiraciju…',
+  editHeroTitle: 'Uredi svoju fotografiju',
+  editSub: 'Dodaj svoju fotografiju i reci šta da AI promijeni. Troši 1 sliku.', editPhoto: 'Dodaj svoju fotografiju',
+  editInputLabel: 'Šta da promijenim?', editPlaceholder: 'npr. stavi me na Stari most u Mostaru, zalazak sunca',
+  editNeedPhoto: 'Prvo dodaj svoju fotografiju.', editNeedText: 'Napiši šta da promijenim.',
+  editConsent: 'Koristi samo svoje fotografije ili fotografije osoba koje su ti to dozvolile.',
+  examples: {
+    ...hr.examples,
+    caption: ['Kafa s prijateljicom ☕', 'Prvi dan godišnjeg 🌊', 'Novi outfit za izlazak'],
+    reply: ['Šta radiš večeras? 😏', 'Izvini što se nisam javio/la', 'Dolaziš u subotu na rođendan?'],
+    wish: ['Mama, voli baštu i kafu', 'Najbolja drugarica od vrtića'],
+    bio: ['Studentica, volim putovanja i kafu', 'Teretana, muzika i dobra hrana'],
+    plan: ['Sarajevo, volimo hranu', 'Kišni dan', 'Prvi spoj'],
+    image: ['Mačka u svemirskom odijelu na Mjesecu', 'Stari most u Mostaru u zalazak sunca', 'Slatki zmaj pije kafu u kafiću'],
+    edit: ['Stavi me na Vrelo Bosne', 'Pretvori me u anime lik', 'Stavi me u Pariz kod Eiffelovog tornja'],
+  },
 };
 
 const sr: Strings = {
@@ -135,13 +200,63 @@ const sr: Strings = {
     wish: { name: 'Čestitka', blurb: 'Rođendan, ljubav, prijatelji', title: 'Čestitka ili posveta', subtitle: 'Izaberi priliku i dodaj par detalja, dobiješ ličnu poruku.', inputLabel: 'Za koga je i neki detalj (nije obavezno)', placeholder: 'npr. Jelena, najbolja drugarica, volimo karaoke i kafu', button: 'Napiši poruku 💌' },
     rate: { name: 'Oceni fotografiju', blurb: 'Saveti pre objave', title: 'Oceni moju fotografiju', subtitle: 'AI pogleda fotografiju i kaže kako da je poboljšaš pre objave.', inputLabel: 'Nešto dodatno (nije obavezno)', placeholder: 'npr. ne znam koji filter da stavim', button: 'Oceni ⭐' },
     bio: { name: 'Bio za profil', blurb: 'Instagram, TikTok, dejting', title: 'Bio za profil', subtitle: 'Napiši par reči o sebi, dobiješ bio za Instagram ili TikTok.', inputLabel: 'O tebi', placeholder: 'npr. studentkinja, Novi Sad, volim kafu, muziku i putovanja', button: 'Napravi bio 🪄' },
+    vibe: { name: 'Vibe check', blurb: 'Koji je tvoj vibe?', title: 'Vibe check', subtitle: 'Dodaj fotografiju i AI ti kaže koji je tvoj vibe, boje i muzika koja ti paše.', inputLabel: 'Nešto dodatno (nije obavezno)', placeholder: 'npr. ovo je moja nova frizura', button: 'Proveri vibe 🔮' },
+    story: { name: 'Story ideje', blurb: 'Instagram storiji', title: 'Ideje za Instagram story', subtitle: 'Reci o čemu, dobiješ niz storija sa anketama i pitanjima.', inputLabel: 'O čemu su storiji?', placeholder: 'npr. vikend na moru sa ekipom', button: 'Smisli storije 📱' },
+    plan: { name: 'Ideje za izlazak', blurb: 'Sastanak, ekipa, vikend', title: 'Šta da radimo?', subtitle: 'Izaberi sa kim i budžet, dobiješ ideje za izlazak.', inputLabel: 'Grad ili šta volite (nije obavezno)', placeholder: 'npr. Beograd, volimo hranu i muziku', button: 'Daj ideje 🎉' },
     image: { name: 'Slika', blurb: '', title: 'Slika iz opisa', subtitle: '', inputLabel: '', placeholder: '', button: '' },
+    edit: { name: 'Uređena fotografija', blurb: '', title: 'Uredi svoju fotografiju', subtitle: '', inputLabel: '', placeholder: '', button: '' },
+    fonts: { name: 'Fancy fontovi', blurb: 'Fontovi i simboli za bio', title: 'Fancy fontovi', subtitle: 'Upiši tekst i dodirni stil da ga kopiraš. Radi u Instagram i TikTok biju.', inputLabel: '', placeholder: '', button: '' },
+    tags: { name: 'Gotovi heštegovi', blurb: 'Po temama, jedan klik', title: 'Gotovi heštegovi', subtitle: 'Izaberi temu i dodirni da kopiraš heštegove.', inputLabel: '', placeholder: '', button: '' },
   },
+  symbolGroups: { hearts: 'Srca', stars: 'Zvezdice', dividers: 'Razdelnici', kaomoji: 'Kaomoji', shapes: 'Strelice i oblici' },
   hashtags: 'Heštegovi',
-  fields: { platform: 'Mreža', tone: 'Stil', language: 'Jezik', sender: 'Ko ti piše', length: 'Dužina', style: 'Stil', occasion: 'Prilika', purpose: 'Fotografija je za', format: 'Format', for: 'Za', how: 'Kako želiš da zvučiš' },
+  fields: { platform: 'Mreža', tone: 'Stil', language: 'Jezik', sender: 'Ko ti piše', length: 'Dužina', style: 'Stil', occasion: 'Prilika', purpose: 'Fotografija je za', format: 'Format', for: 'Za', how: 'Kako želiš da zvučiš', kind: 'Vrsta', who: 'Sa kim', budget: 'Budžet', place: 'Gde' },
+  greeting: (h) => (h < 11 ? 'Dobro jutro ☀️' : h < 18 ? 'Ćao! 👋' : 'Dobro veče 🌙'),
+  dailyTitle: 'Inspiracija dana', dailyTrend: 'Video ideja dana', dailyError: 'Inspiracija trenutno nije dostupna.',
+  editHeroSub: 'Stavi se na plažu, u anime ili neon svet.',
+  editSub: 'Dodaj svoju fotografiju i reci šta da AI promeni. Troši 1 sliku.',
+  editInputLabel: 'Šta da promenim?', editPlaceholder: 'npr. stavi me na Kalemegdan, zalazak sunca',
+  editNeedText: 'Napiši šta da promenim.',
+  examples: {
+    caption: ['Kafa sa drugaricom ☕', 'Prvi dan godišnjeg odmora 🌊', 'Novi autfit za izlazak'],
+    reply: ['Šta radiš večeras? 😏', 'Izvini što se nisam javio/la', 'Dolaziš u subotu na rođendan?'],
+    reel: ['Šta jedem u jednom danu', 'Moja jutarnja rutina', 'Sređujem sobu na budžetu'],
+    wish: ['Mama, voli baštu i kafu', 'Najbolja drugarica iz vrtića'],
+    bio: ['Studentkinja, volim putovanja i kafu', 'Teretana, muzika i dobra hrana'],
+    story: ['Vikend na moru', 'Dan na poslu', 'Kuvam večeru za ekipu'],
+    plan: ['Beograd, volimo hranu', 'Kišni dan', 'Prvi sastanak'],
+    image: ['Mačka u svemirskom odelu na Mesecu', 'Kalemegdan u zalazak sunca', 'Slatki zmaj pije kafu u kafiću'],
+    edit: ['Stavi me na plažu u Budvi', 'Pretvori me u anime lik', 'Stavi me u Pariz kod Ajfelove kule'],
+  },
 };
 
 const de: Strings = {
+  sectionFree: 'Gratis, ohne Limit', inviteName: 'Freunde einladen', inviteBlurb: 'Teil Vajb mit deinen Leuten',
+  inviteMessage: (u) => `Probier Vajb AI ✨ KI-Helfer für Instagram und TikTok: Captions, Antworten, Bilder und Fonts für die Bio. 👉 ${u}`,
+  fontsInputLabel: 'Dein Text', fontsPlaceholder: 'z. B. dein Name oder ein Satz für die Bio', fontsTab: 'Fonts', symbolsTab: 'Symbole & Kaomoji', tapToCopy: 'Zum Kopieren antippen',
+  symbolGroups: { hearts: 'Herzen', stars: 'Sterne', dividers: 'Trenner', kaomoji: 'Kaomoji', shapes: 'Pfeile & Formen' },
+  greeting: (h) => (h < 11 ? 'Guten Morgen ☀️' : h < 18 ? 'Hi! 👋' : 'Guten Abend 🌙'),
+  streak: (n) => `🔥 ${n} ${n === 1 ? 'Tag' : 'Tage'}`,
+  dailyTitle: 'Inspiration des Tages', dailyCaption: 'Caption des Tages', dailyTrend: 'Video-Idee des Tages', dailyQuote: 'Gedanke des Tages', dailyChallenge: 'Challenge des Tages',
+  dailyLoading: 'Suche Inspiration…', dailyError: 'Die Inspiration ist gerade nicht verfügbar.',
+  sectionTools: 'Alle Tools', tryThis: 'Probier:',
+  editHeroTitle: 'Bearbeite dein Foto', editHeroSub: 'Ab an den Strand, in Anime oder Neon.',
+  editSub: 'Füg dein Foto hinzu und sag der KI, was sie ändern soll. Kostet 1 Bild.', editPhoto: 'Dein Foto hinzufügen',
+  editInputLabel: 'Was soll ich ändern?', editPlaceholder: 'z. B. setz mich an einen Strand bei Sonnenuntergang',
+  editDo: 'Foto bearbeiten ✨', editDoing: 'Ich bearbeite… (bis 30 s)', editNeedPhoto: 'Füg zuerst dein Foto hinzu.', editNeedText: 'Schreib, was ich ändern soll.',
+  editConsent: 'Nutze nur deine eigenen Fotos oder Fotos von Personen, die zugestimmt haben.',
+  examples: {
+    caption: ['Kaffee mit meiner besten Freundin ☕', 'Erster Urlaubstag 🌊', 'Neues Outfit für heute Abend'],
+    reply: ['Was machst du heute Abend? 😏', 'Sorry, dass ich mich nicht gemeldet hab', 'Kommst du Samstag zum Geburtstag?'],
+    reel: ['Was ich an einem Tag esse', 'Meine Morgenroutine', 'Zimmer-Makeover mit kleinem Budget'],
+    wish: ['Mama, liebt Garten und Kaffee', 'Beste Freundin seit dem Kindergarten'],
+    bio: ['Studentin, liebe Reisen und Kaffee', 'Gym, Musik und gutes Essen'],
+    story: ['Wochenende am Meer', 'Ein Tag bei der Arbeit', 'Ich koche für meine Freunde'],
+    plan: ['Stuttgart, wir lieben Essen', 'Regentag', 'Erstes Date'],
+    image: ['Katze im Raumanzug auf dem Mond', 'Heidelberg bei Sonnenuntergang', 'Süßer Drache trinkt Kaffee im Café'],
+    edit: ['Setz mich an einen Strand auf Mallorca', 'Mach mich zur Anime-Figur', 'Setz mich nach Paris vor den Eiffelturm'],
+  },
+  proActive: 'Premium ist aktiv. Viel Spaß mit unbegrenzten Texten und 20 Bildern pro Tag! 👑',
   today: 'heute',
   navTools: 'Tools', navSaved: 'Gespeichert', navPremium: 'Premium',
   homeTitle: 'Was machen wir heute?', homeSub: 'Wähle ein Tool, die KI erledigt den Rest.',
@@ -169,12 +284,44 @@ const de: Strings = {
     wish: { name: 'Glückwunsch', blurb: 'Geburtstag, Liebe, Freunde', title: 'Glückwunsch oder Widmung', subtitle: 'Wähl einen Anlass und ein paar Details, du bekommst eine persönliche Nachricht.', inputLabel: 'Für wen, und ein Detail (optional)', placeholder: 'z. B. Lena, beste Freundin, wir lieben Karaoke und Kaffee', button: 'Nachricht schreiben 💌' },
     rate: { name: 'Foto bewerten', blurb: 'Tipps vor dem Posten', title: 'Bewerte mein Foto', subtitle: 'Die KI schaut sich dein Foto an und sagt, wie du es vor dem Posten verbesserst.', inputLabel: 'Noch etwas dazu (optional)', placeholder: 'z. B. ich weiß nicht, welchen Filter ich nehmen soll', button: 'Bewerten ⭐' },
     bio: { name: 'Profil-Bio', blurb: 'Instagram, TikTok, Dating', title: 'Bio für dein Profil', subtitle: 'Schreib ein paar Worte über dich und bekomm eine Bio für Instagram oder TikTok.', inputLabel: 'Über dich', placeholder: 'z. B. Studentin, Stuttgart, liebe Kaffee, Techno und Reisen', button: 'Bio erstellen 🪄' },
+    vibe: { name: 'Vibe-Check', blurb: 'Was ist dein Vibe?', title: 'Vibe-Check', subtitle: 'Füg ein Foto hinzu und die KI sagt dir deinen Vibe, deine Farben und die passende Musik.', inputLabel: 'Noch etwas dazu (optional)', placeholder: 'z. B. das ist meine neue Frisur', button: 'Vibe checken 🔮' },
+    story: { name: 'Story-Ideen', blurb: 'Instagram-Storys', title: 'Ideen für Instagram-Storys', subtitle: 'Sag worüber, und bekomm eine Story-Reihe mit Umfragen und Fragen.', inputLabel: 'Worum gehen die Storys?', placeholder: 'z. B. Wochenende am Meer mit Freunden', button: 'Storys ausdenken 📱' },
+    plan: { name: 'Was unternehmen?', blurb: 'Date, Freunde, Wochenende', title: 'Was machen wir?', subtitle: 'Wähl mit wem und dein Budget, und bekomm Ideen fürs Date oder zum Ausgehen.', inputLabel: 'Stadt oder was ihr mögt (optional)', placeholder: 'z. B. Stuttgart, wir lieben Essen und Musik', button: 'Ideen bekommen 🎉' },
     image: { name: 'Bild', blurb: '', title: 'Bild aus Text', subtitle: '', inputLabel: '', placeholder: '', button: '' },
+    edit: { name: 'Bearbeitetes Foto', blurb: '', title: 'Bearbeite dein Foto', subtitle: '', inputLabel: '', placeholder: '', button: '' },
+    fonts: { name: 'Fancy Fonts', blurb: 'Fonts & Symbole für die Bio', title: 'Fancy Fonts', subtitle: 'Schreib deinen Text und tippe auf einen Stil, um ihn zu kopieren. Funktioniert in der Instagram- und TikTok-Bio.', inputLabel: '', placeholder: '', button: '' },
+    tags: { name: 'Hashtag-Sets', blurb: 'Nach Thema, ein Klick', title: 'Hashtag-Sets', subtitle: 'Wähl ein Thema und tippe, um die Hashtags zu kopieren.', inputLabel: '', placeholder: '', button: '' },
   },
-  fields: { platform: 'Netzwerk', tone: 'Stil', language: 'Sprache', sender: 'Wer schreibt dir', length: 'Länge', style: 'Stil', occasion: 'Anlass', purpose: 'Das Foto ist für', format: 'Format', for: 'Für', how: 'Wie willst du klingen' },
+  fields: { platform: 'Netzwerk', tone: 'Stil', language: 'Sprache', sender: 'Wer schreibt dir', length: 'Länge', style: 'Stil', occasion: 'Anlass', purpose: 'Das Foto ist für', format: 'Format', for: 'Für', how: 'Wie willst du klingen', kind: 'Art', who: 'Mit wem', budget: 'Budget', place: 'Wo' },
 };
 
 const en: Strings = {
+  sectionFree: 'Free, no limits', inviteName: 'Invite a friend', inviteBlurb: 'Share Vajb with your people',
+  inviteMessage: (u) => `Try Vajb AI ✨ an AI helper for Instagram and TikTok: captions, replies, images and fonts for your bio. 👉 ${u}`,
+  fontsInputLabel: 'Your text', fontsPlaceholder: 'e.g. your name or a line for your bio', fontsTab: 'Fonts', symbolsTab: 'Symbols & kaomoji', tapToCopy: 'Tap to copy',
+  symbolGroups: { hearts: 'Hearts', stars: 'Stars', dividers: 'Dividers', kaomoji: 'Kaomoji', shapes: 'Arrows & shapes' },
+  greeting: (h) => (h < 11 ? 'Good morning ☀️' : h < 18 ? 'Hey! 👋' : 'Good evening 🌙'),
+  streak: (n) => `🔥 ${n} ${n === 1 ? 'day' : 'days'}`,
+  dailyTitle: 'Inspiration of the day', dailyCaption: 'Caption of the day', dailyTrend: 'Video idea of the day', dailyQuote: 'Thought of the day', dailyChallenge: 'Challenge of the day',
+  dailyLoading: 'Finding inspiration…', dailyError: 'Inspiration is not available right now.',
+  sectionTools: 'All tools', tryThis: 'Try:',
+  editHeroTitle: 'Edit your photo', editHeroSub: 'Put yourself on a beach, in anime or neon.',
+  editSub: 'Add your photo and tell the AI what to change. Uses 1 image.', editPhoto: 'Add your photo',
+  editInputLabel: 'What should I change?', editPlaceholder: 'e.g. put me on a beach at sunset',
+  editDo: 'Edit photo ✨', editDoing: 'Editing… (up to 30 s)', editNeedPhoto: 'Add your photo first.', editNeedText: 'Write what I should change.',
+  editConsent: 'Only use your own photos or photos of people who said it is okay.',
+  examples: {
+    caption: ['Coffee with my best friend ☕', 'First day of holiday 🌊', 'New outfit for tonight'],
+    reply: ['What are you up to tonight? 😏', "Sorry I didn't text back", 'Coming to the birthday on Saturday?'],
+    reel: ['What I eat in a day', 'My morning routine', 'Room makeover on a budget'],
+    wish: ['Mom, loves gardening and coffee', 'Best friend since kindergarten'],
+    bio: ['Student, love travel and coffee', 'Gym, music and good food'],
+    story: ['Weekend at the sea', 'A day at work', 'Cooking dinner for friends'],
+    plan: ['Munich, we love food', 'Rainy day', 'First date'],
+    image: ['A cat in a spacesuit on the Moon', 'Dubrovnik at sunset', 'A cute dragon drinking coffee in a café'],
+    edit: ['Put me on a beach in Greece', 'Turn me into an anime character', 'Put me in Paris by the Eiffel Tower'],
+  },
+  proActive: 'Premium is active. Enjoy unlimited texts and 20 images a day! 👑',
   today: 'today',
   navTools: 'Tools', navSaved: 'Saved', navPremium: 'Premium',
   homeTitle: 'What are we making today?', homeSub: 'Pick a tool, the AI does the rest.',
@@ -202,9 +349,15 @@ const en: Strings = {
     wish: { name: 'Wishes', blurb: 'Birthday, love, friends', title: 'Wishes or a dedication', subtitle: 'Pick an occasion and add a few details to get a personal message.', inputLabel: "Who it's for, plus a detail (optional)", placeholder: 'e.g. Emma, best friend, we love karaoke and coffee', button: 'Write message 💌' },
     rate: { name: 'Rate my photo', blurb: 'Tips before posting', title: 'Rate my photo', subtitle: 'The AI looks at your photo and tells you how to improve it before posting.', inputLabel: 'Anything else (optional)', placeholder: "e.g. I can't pick a filter", button: 'Rate ⭐' },
     bio: { name: 'Profile bio', blurb: 'Instagram, TikTok, dating', title: 'Profile bio', subtitle: 'Write a few words about yourself and get a bio for Instagram or TikTok.', inputLabel: 'About you', placeholder: 'e.g. student, Munich, love coffee, techno and travel', button: 'Write bio 🪄' },
+    vibe: { name: 'Vibe check', blurb: "What's your vibe?", title: 'Vibe check', subtitle: 'Add a photo and the AI tells you your vibe, your colors and the music that fits you.', inputLabel: 'Anything else (optional)', placeholder: 'e.g. this is my new haircut', button: 'Check my vibe 🔮' },
+    story: { name: 'Story ideas', blurb: 'Instagram stories', title: 'Instagram story ideas', subtitle: 'Say what about and get a story series with polls and questions.', inputLabel: 'What are the stories about?', placeholder: 'e.g. weekend at the sea with friends', button: 'Get story ideas 📱' },
+    plan: { name: 'Going out ideas', blurb: 'Date, friends, weekend', title: 'What should we do?', subtitle: 'Pick who with and your budget, and get ideas for a date or a night out.', inputLabel: 'City or what you like (optional)', placeholder: 'e.g. Munich, we love food and music', button: 'Get ideas 🎉' },
     image: { name: 'Image', blurb: '', title: 'Image from text', subtitle: '', inputLabel: '', placeholder: '', button: '' },
+    edit: { name: 'Edited photo', blurb: '', title: 'Edit your photo', subtitle: '', inputLabel: '', placeholder: '', button: '' },
+    fonts: { name: 'Fancy fonts', blurb: 'Fonts & symbols for your bio', title: 'Fancy fonts', subtitle: 'Type your text and tap a style to copy it. Works in your Instagram and TikTok bio.', inputLabel: '', placeholder: '', button: '' },
+    tags: { name: 'Hashtag sets', blurb: 'By topic, one tap', title: 'Hashtag sets', subtitle: 'Pick a topic and tap to copy the hashtags.', inputLabel: '', placeholder: '', button: '' },
   },
-  fields: { platform: 'Network', tone: 'Style', language: 'Language', sender: 'Who sent it', length: 'Length', style: 'Style', occasion: 'Occasion', purpose: 'The photo is for', format: 'Format', for: 'For', how: 'How you want to sound' },
+  fields: { platform: 'Network', tone: 'Style', language: 'Language', sender: 'Who sent it', length: 'Length', style: 'Style', occasion: 'Occasion', purpose: 'The photo is for', format: 'Format', for: 'For', how: 'How you want to sound', kind: 'Type', who: 'Who with', budget: 'Budget', place: 'Where' },
 };
 
 export const STRINGS: Record<Lang, Strings> = { hr, bs, sr, de, en };
@@ -222,6 +375,9 @@ const OPT_DE: Record<string, string> = {
   'Fotografija': 'Foto', 'Anime': 'Anime', 'Crtić': 'Cartoon', '3D': '3D', 'Akvarel': 'Aquarell', 'Neon': 'Neon',
   'Kvadrat': 'Quadrat', 'Uspravno': 'Hochformat', 'Vodoravno': 'Querformat',
   'Hrvatski': 'Kroatisch', 'Bosanski': 'Bosnisch', 'Srpski': 'Serbisch', 'Deutsch': 'Deutsch', 'English': 'Englisch',
+  'Iskreno': 'Ehrlich', 'Anketa i pitanja': 'Umfragen & Fragen', 'Dan u životu': 'Ein Tag in meinem Leben', 'Iza kulisa': 'Hinter den Kulissen', 'Promocija': 'Werbung',
+  'Spoj': 'Date', 'Ekipa': 'Freunde', 'Sam/a': 'Allein', 'Obitelj': 'Familie',
+  'Besplatno': 'Kostenlos', 'Do 20 €': 'Bis 20 €', 'Bez limita': 'Ohne Limit', 'Vani': 'Draußen', 'Unutra': 'Drinnen', 'Realistično': 'Realistisch',
 };
 const OPT_EN: Record<string, string> = {
   'Opušteno': 'Chill', 'Duhovito': 'Funny', 'Romantično': 'Romantic', 'Motivacijski': 'Motivational', 'Misteriozno': 'Mysterious',
@@ -235,12 +391,16 @@ const OPT_EN: Record<string, string> = {
   'Fotografija': 'Photo', 'Anime': 'Anime', 'Crtić': 'Cartoon', '3D': '3D', 'Akvarel': 'Watercolor', 'Neon': 'Neon',
   'Kvadrat': 'Square', 'Uspravno': 'Portrait', 'Vodoravno': 'Landscape',
   'Hrvatski': 'Croatian', 'Bosanski': 'Bosnian', 'Srpski': 'Serbian', 'Deutsch': 'German', 'English': 'English',
+  'Iskreno': 'Honest', 'Anketa i pitanja': 'Polls & questions', 'Dan u životu': 'Day in my life', 'Iza kulisa': 'Behind the scenes', 'Promocija': 'Promo',
+  'Spoj': 'Date', 'Ekipa': 'Friends', 'Sam/a': 'Solo', 'Obitelj': 'Family',
+  'Besplatno': 'Free', 'Do 20 €': 'Up to €20', 'Bez limita': 'No limit', 'Vani': 'Outdoors', 'Unutra': 'Indoors', 'Realistično': 'Realistic',
 };
-const OPT_BS: Record<string, string> = { 'Prijatelju': 'Prijatelju', 'Mami ili tati': 'Mami ili tati', 'Vjenčanje': 'Vjenčanje' };
+const OPT_BS: Record<string, string> = { 'Prijatelju': 'Prijatelju', 'Mami ili tati': 'Mami ili tati', 'Vjenčanje': 'Vjenčanje', 'Obitelj': 'Porodica' };
 const OPT_SR: Record<string, string> = {
   'Opušteno': 'Opušteno', 'Samouvjereno': 'Samouvereno', 'Pristojno odbij': 'Pristojno odbij', 'Prije/poslije': 'Pre/posle',
   'Godišnjica veze': 'Godišnjica veze', 'Vjenčanje': 'Venčanje', 'Pjesmica': 'Pesmica', 'Crtić': 'Crtani', 'Uspravno': 'Uspravno',
   'Fotografija': 'Fotografija', 'Profilna slika': 'Profilna slika',
+  'Obitelj': 'Porodica', 'Spoj': 'Sastanak', 'Vani': 'Napolju', 'Unutra': 'Unutra', 'Iskreno': 'Iskreno',
 };
 
 export function optionLabel(lang: Lang, value: string): string {

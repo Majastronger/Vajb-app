@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="hr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vajb AI</title>
+<meta name="description" content="Vajb AI: AI pomoćnik za Instagram i TikTok. Opisi, odgovori na poruke, slike i fontovi za bio.">
+<style>
+  :root { --bg: #FFFFFF; --card: #F5F6FB; --fg: #161A2E; --muted: #5E6480; --line: #DDE0EC; --accent: #E3246E; --sun: #FFC83D; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #131629; --card: #1B1F36; --fg: #EEF0FA; --muted: #9AA0BD; --line: #2A2F4D; --accent: #FF4F8E; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 28px 16px 48px; }
+  .logo { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; margin: 0; }
+  .logo span { color: var(--accent); }
+  h1 { font-size: 26px; line-height: 1.2; margin: 18px 0 8px; }
+  p { margin: 0 0 12px; color: var(--muted); }
+  .features { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 20px 0; }
+  .features div { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px; font-weight: 600; font-size: 15px; }
+  .steps { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 18px; margin: 20px 0; }
+  .steps h2 { margin: 0 0 6px; font-size: 19px; }
+  .step { display: flex; gap: 12px; margin-top: 14px; }
+  .num { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 800; display: grid; place-items: center; }
+  .btn { display: block; text-align: center; background: var(--accent); color: #fff; text-decoration: none; font-weight: 700; border-radius: 14px; padding: 13px; margin-top: 8px; }
+  .note { font-size: 14px; }
+  details { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+  summary { cursor: pointer; font-weight: 700; }
+  footer { margin-top: 28px; font-size: 13px; color: var(--muted); }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <p class="logo">vajb<span>.</span>ai</p>
+  <h1>Tvoj AI pomoćnik za Instagram i TikTok ✨</h1>
+  <p>Opisi za objave, odgovori na poruke, slike iz opisa, uređivanje fotki i fancy fontovi za bio. Na hrvatskom, bosanskom, srpskom, njemačkom i engleskom.</p>
+
+  <div class="features">
+    <div>📸 Opis za objavu</div>
+    <div>💬 Što da odgovorim?</div>
+    <div>🎨 Slika iz opisa</div>
+    <div>🤳 Uredi svoju fotku</div>
+    <div>🔮 Vibe check</div>
+    <div>🔤 Fancy fontovi</div>
+  </div>
+
+  <section class="steps">
+    <h2>Kako doći do aplikacije</h2>
+    <p class="note">Vajb AI je trenutno u testiranju na Google Playu, samo za Android. Traje 2 minute:</p>
+    <div class="step"><div class="num">1</div><div>
+      Pridruži se grupi testera, <strong>s istim Gmailom koji imaš na mobitelu</strong>, i klikni "Pridruži se grupi".
+      <a class="btn" href="https://groups.google.com/g/vajb-testeri">Pridruži se grupi</a>
+    </div></div>
+    <div class="step"><div class="num">2</div><div>
+      Otvori ovaj link, klikni <strong>"Postani tester"</strong>, pa preuzmi aplikaciju.
+      <a class="btn" href="https://play.google.com/apps/testing/com.vajbai.app">Postani tester</a>
+    </div></div>
+    <p class="note" style="margin-top:14px">Ako piše "nije pronađeno", pričekaj pola sata pa probaj opet. Google treba malo vremena.</p>
+
+    <details>
+      <summary>🇩🇪 Deutsch</summary>
+      <p style="margin-top:8px">Vajb AI ist gerade im Test auf Google Play (nur Android). 1) Tritt mit derselben Gmail-Adresse wie auf deinem Handy der <a href="https://groups.google.com/g/vajb-testeri">Testergruppe</a> bei. 2) Öffne <a href="https://play.google.com/apps/testing/com.vajbai.app">diesen Link</a>, tippe auf "Tester werden" und lade die App herunter.</p>
+    </details>
+    <details>
+      <summary>🇬🇧 English</summary>
+      <p style="margin-top:8px">Vajb AI is in testing on Google Play (Android only). 1) Join the <a href="https://groups.google.com/g/vajb-testeri">tester group</a> with the same Gmail as on your phone. 2) Open <a href="https://play.google.com/apps/testing/com.vajbai.app">this link</a>, tap "Become a tester" and download the app.</p>
+    </details>
+  </section>
+
+  <footer>
+    RisewithMaja · <a href="mailto:Risewithmaja@gmail.com">Risewithmaja@gmail.com</a> · <a href="privatnost.html">Pravila privatnosti</a>
+  </footer>
+</main>
+</body>
+</html>
